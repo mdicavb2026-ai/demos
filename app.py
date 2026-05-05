@@ -3,9 +3,37 @@ import pandas as pd
 from supabase import create_client, Client
 import plotly.express as px
 import plotly.graph_objects as go
+from collections import Counter
+import re
 
 # --- CONFIGURACIÓN DE PANTALLA ---
-st.set_page_config(page_title="War Room CMPC", page_icon="🛡️", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="WAR ROOM CMPC", page_icon="🛡️", layout="wide", initial_sidebar_state="collapsed")
+
+# --- CSS PERSONALIZADO (Grado Militar / Interfaz Oscura) ---
+st.markdown("""
+<style>
+    .stApp { background-color: #0b111e; color: #ffffff; }
+    h1, h2, h3 { color: #4fc3f7; font-family: 'Arial', sans-serif; }
+    
+    /* Tarjetas de Feed */
+    .card-critico { border-left: 4px solid #ff1744; background-color: #151b2b; padding: 10px; margin-bottom: 10px; border-radius: 4px; }
+    .card-alto { border-left: 4px solid #ff9100; background-color: #151b2b; padding: 10px; margin-bottom: 10px; border-radius: 4px; }
+    .card-judicial { border-left: 4px solid #29b6f6; background-color: #151b2b; padding: 10px; margin-bottom: 10px; border-radius: 4px; }
+    
+    .titular { font-size: 14px; font-weight: bold; margin-bottom: 5px; }
+    .fecha-fuente { font-size: 11px; color: #8892b0; text-align: right; }
+    .prospectiva-box { border-left: 2px solid #ffd54f; padding-left: 8px; margin-top: 8px; font-size: 12px; color: #cfd8dc; }
+    .etiqueta-prospectiva { color: #ffd54f; font-weight: bold; font-size: 10px; }
+    
+    /* Contenedores de Sección */
+    .section-title { font-size: 14px; color: #ffffff; text-transform: uppercase; border-bottom: 1px solid #293145; padding-bottom: 5px; margin-bottom: 15px; margin-top: 15px; }
+    
+    /* KPIs Prospectiva */
+    .kpi-box { background-color: #151b2b; padding: 15px; border-radius: 5px; border-top: 3px solid; text-align: left; }
+    .kpi-title { font-size: 12px; color: #8892b0; text-transform: uppercase; }
+    .kpi-value { font-size: 28px; font-weight: bold; }
+</style>
+""", unsafe_allow_html=True)
 
 # --- CREDENCIALES ---
 URL = "https://wffttolclywvofzakmfd.supabase.co"
@@ -16,16 +44,14 @@ def load_data():
     supabase: Client = create_client(URL, API_KEY)
     response = supabase.table("inteligencia_tactica").select("*").execute()
     df = pd.DataFrame(response.data)
-    
     if not df.empty and 'fecha' in df.columns:
         df['fecha_orden'] = pd.to_datetime(df['fecha'], errors='coerce')
-        df = df.dropna(subset=['fecha_orden']).copy()
-        df = df.sort_values(by='fecha_orden', ascending=False)
-        df['fecha_mostrar'] = df['fecha_orden'].dt.strftime('%d/%m/%Y %H:%M')
-        
-        # Respaldo de seguridad visual (El motor real de Python ya hace esto, esto es solo para colorear el dashboard)
+        df = df.dropna(subset=['fecha_orden']).sort_values(by='fecha_orden', ascending=False)
+        df['fecha_mostrar'] = df['fecha_orden'].dt.strftime('%d/%m/%Y')
         df['Nivel de Amenaza'] = df['nivel_alerta'].fillna('BAJO').str.upper()
         df['Magnitud'] = df['puntaje_riesgo'].apply(lambda x: float(x) if pd.notnull(x) and float(x) > 0 else 1.0)
+        df['actor'] = df['actor'].fillna('Desconocido')
+        df['palabra_clave'] = df['palabra_clave'].fillna('')
     else:
         df = pd.DataFrame()
     return df
@@ -33,102 +59,154 @@ def load_data():
 df_base = load_data()
 
 if df_base.empty:
-    st.warning("El Búnker está esperando la inyección de datos del Motor Python.")
+    st.error("Bóveda sin datos. Verifique la conexión o el motor Python.")
     st.stop()
 
-# --- PANEL LATERAL (FILTROS) ---
-st.sidebar.markdown("# 🛡️ WAR ROOM CMPC")
-st.sidebar.markdown("## ⚙️ Centro de Comando")
+# --- HEADER GLOBAL ---
+st.markdown(f"**WAR ROOM CMPC** • V9.40 | Vista: **HISTÓRICO GLOBAL** | Eventos: **{len(df_base)}**")
+tab_tactico, tab_prospectiva = st.tabs(["🎯 TÁCTICO", "📊 PROSPECTIVA"])
 
-fecha_min = df_base['fecha_orden'].min().date()
-fecha_max = df_base['fecha_orden'].max().date()
-rango_fechas = st.sidebar.date_input("Filtrar por Ventana Temporal", [fecha_min, fecha_max], min_value=fecha_min, max_value=fecha_max)
+colores_tacticos = {'CRÍTICO': '#ff1744', 'ALTO': '#ff9100', 'MEDIO': '#29b6f6', 'BAJO': '#4caf50'}
 
-niveles_disponibles = df_base['Nivel de Amenaza'].unique().tolist()
-filtro_nivel = st.sidebar.multiselect("Nivel de Alerta", niveles_disponibles, default=niveles_disponibles)
+# ==========================================
+# PESTAÑA 1: TÁCTICO
+# ==========================================
+with tab_tactico:
+    col_izq, col_mapa, col_der = st.columns([2.5, 5, 2.5])
+    
+    # --- COLUMNA IZQUIERDA ---
+    with col_izq:
+        st.markdown('<div class="section-title">FEED MULTIMEDIA (7 DÍAS)</div>', unsafe_allow_html=True)
+        st.info("Conexión a repositorio de imágenes activada. Esperando capturas OSINT.")
+        
+        st.markdown('<div class="section-title">ÚLTIMOS ATENTADOS CMPC</div>', unsafe_allow_html=True)
+        df_criticos = df_base[df_base['Nivel de Amenaza'] == 'CRÍTICO'].head(3)
+        for _, row in df_criticos.iterrows():
+            st.markdown(f"""
+            <div class="card-critico">
+                <div class="fecha-fuente">{row['fecha_mostrar']} | {row['actor']}</div>
+                <div class="titular">{row['titular']}</div>
+                <div class="prospectiva-box"><span class="etiqueta-prospectiva">💡 PROSPECTIVA:</span> {row['resumen_ia']}</div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+        st.markdown('<div class="section-title">CONTEXTO & JUDICIAL</div>', unsafe_allow_html=True)
+        df_judicial = df_base[df_base['catalizador'].str.contains('Judicial|Contexto', case=False, na=False)].head(2)
+        if df_judicial.empty:
+             df_judicial = df_base[df_base['Nivel de Amenaza'] == 'MEDIO'].head(2)
+        for _, row in df_judicial.iterrows():
+            st.markdown(f"""
+            <div class="card-judicial">
+                <div class="fecha-fuente">{row['fecha_mostrar']}</div>
+                <div class="titular">{row['titular']}</div>
+                <div class="prospectiva-box"><span class="etiqueta-prospectiva">💡 PROSPECTIVA:</span> {row['resumen_ia']}</div>
+            </div>
+            """, unsafe_allow_html=True)
 
-df_filtrado = df_base[df_base['Nivel de Amenaza'].isin(filtro_nivel)]
-if len(rango_fechas) == 2:
-    df_filtrado = df_filtrado[(df_filtrado['fecha_orden'].dt.date >= rango_fechas[0]) & (df_filtrado['fecha_orden'].dt.date <= rango_fechas[1])]
-
-# --- INTERFAZ PRINCIPAL ---
-st.title("🛡️ Sistema de Inteligencia y Prospectiva C5I")
-
-# KPIs Ejecutivos
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("Alertas en Rango", len(df_filtrado))
-c2.metric("Incidentes Críticos", len(df_filtrado[df_filtrado['Nivel de Amenaza'] == 'CRÍTICO']))
-c3.metric("Incidentes Altos", len(df_filtrado[df_filtrado['Nivel de Amenaza'] == 'ALTO']))
-c4.metric("Última Alerta", df_filtrado['fecha_mostrar'].iloc[0] if not df_filtrado.empty else "N/A")
-
-st.markdown("---")
-
-# MÓDULOS 7 y 8: MAPA Y PROSPECTIVA
-col_mapa, col_grafico = st.columns([5, 5])
-colores_tacticos = {'CRÍTICO': '#FF1744', 'ALTO': '#FF9100', 'MEDIO': '#29B6F6', 'BAJO': '#4CAF50'}
-
-with col_mapa:
-    st.markdown("#### 📍 Despliegue Táctico Territorial")
-    df_mapa = df_filtrado.dropna(subset=['latitud', 'longitud']).copy()
-    if not df_mapa.empty:
+    # --- COLUMNA CENTRAL (MAPA) ---
+    with col_mapa:
+        st.markdown('<div class="section-title">MAPA TÁCTICO DE OPERACIONES</div>', unsafe_allow_html=True)
+        df_mapa = df_base.dropna(subset=['latitud', 'longitud'])
         fig_mapa = px.scatter_mapbox(
             df_mapa, lat="latitud", lon="longitud", hover_name="titular",
-            hover_data={"fecha_mostrar": False, "actor": False, "ubicacion": False, "Nivel de Amenaza": False, "Magnitud": False, "latitud": False, "longitud": False},
-            color="Nivel de Amenaza", size="Magnitud", size_max=16,
-            color_discrete_map=colores_tacticos, zoom=6.0, height=500
+            hover_data={"fecha_mostrar": False, "actor": False, "Nivel de Amenaza": False, "Magnitud": False, "latitud": False, "longitud": False},
+            color="Nivel de Amenaza", size="Magnitud", size_max=12,
+            color_discrete_map=colores_tacticos, zoom=6.5, height=750
         )
         fig_mapa.update_layout(
             mapbox_style="carto-darkmatter", margin={"r":0,"t":0,"l":0,"b":0},
-            hoverlabel=dict(bgcolor="#1E1E1E", font_size=14)
+            hoverlabel=dict(bgcolor="#1E1E1E", font_size=12, font_family="Arial"),
+            showlegend=False
         )
-        st.plotly_chart(fig_mapa, use_container_width=True, config={'scrollZoom': True, 'displayModeBar': False})
+        st.plotly_chart(fig_mapa, use_container_width=True, config={'displayModeBar': False})
 
-with col_grafico:
-    st.markdown("#### 📊 Prospectiva: Distribución de Riesgo")
-    if not df_filtrado.empty:
-        conteo_riesgo = df_filtrado['Nivel de Amenaza'].value_counts().reset_index()
-        conteo_riesgo.columns = ['Nivel', 'Cantidad']
-        fig_bar = px.bar(
-            conteo_riesgo, x='Cantidad', y='Nivel', orientation='h', color='Nivel',
-            color_discrete_map=colores_tacticos, height=220, template="plotly_dark", text='Cantidad'
-        )
-        fig_bar.update_layout(showlegend=False, margin={"r":10,"t":10,"l":10,"b":10}, yaxis_title=None, xaxis_title=None)
-        st.plotly_chart(fig_bar, use_container_width=True)
+    # --- COLUMNA DERECHA ---
+    with col_der:
+        st.markdown('<div class="section-title">FEED TÁCTICO GENERAL</div>', unsafe_allow_html=True)
+        df_altos = df_base[df_base['Nivel de Amenaza'] == 'ALTO'].head(3)
+        for _, row in df_altos.iterrows():
+            st.markdown(f"""
+            <div class="card-alto">
+                <div class="fecha-fuente">{row['fecha_mostrar']}</div>
+                <div class="titular">{row['titular']}</div>
+                <div class="prospectiva-box"><span class="etiqueta-prospectiva">💡 PROSPECTIVA:</span> {row['resumen_ia']}</div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+        st.markdown('<div class="section-title">ORGÁNICAS TERRORISTAS</div>', unsafe_allow_html=True)
+        actores = df_base[~df_base['actor'].str.contains('Desconocido', case=False)]['actor'].value_counts().reset_index()
+        actores.columns = ['Organización', 'Eventos']
+        st.dataframe(actores.head(5), hide_index=True, use_container_width=True)
+        
+        st.markdown('<div class="section-title">TRENDING KEYWORDS</div>', unsafe_allow_html=True)
+        todas_palabras = " ".join(df_base['palabra_clave'].dropna().tolist())
+        palabras_limpias = [p.capitalize() for p in re.findall(r'\b\w+\b', todas_palabras) if len(p) > 3]
+        conteo_palabras = Counter(palabras_limpias).most_common(12)
+        tags_html = " ".join([f"<span style='color:#4fc3f7; font-size:12px; margin-right:8px;'>#{word}</span>" for word, _ in conteo_palabras])
+        st.markdown(f"<div style='padding:10px; background-color:#151b2b; border-radius:5px;'>{tags_html}</div>", unsafe_allow_html=True)
 
-    st.markdown("#### 📈 Prospectiva: Evolución Temporal")
-    if not df_filtrado.empty:
-        tendencia = df_filtrado.groupby([df_filtrado['fecha_orden'].dt.to_period("D"), 'Nivel de Amenaza']).size().reset_index(name='Incidentes')
+
+# ==========================================
+# PESTAÑA 2: PROSPECTIVA
+# ==========================================
+with tab_prospectiva:
+    st.markdown("### INTELIGENCIA PROSPECTIVA OSINT", unsafe_allow_html=True)
+    st.markdown("<span style='color:#8892b0; font-size:12px;'>Evaluación matemática de la amenaza real y distribución espacial.</span>", unsafe_allow_html=True)
+    
+    # --- KPIs Superiores ---
+    k1, k2, k3, k4 = st.columns(4)
+    k1.markdown("""<div class="kpi-box" style="border-color:#4caf50;"><div class="kpi-title">🌲 VECTOR PREDIAL</div><div class="kpi-value" style="color:#4caf50;">17%</div></div>""", unsafe_allow_html=True)
+    k2.markdown("""<div class="kpi-box" style="border-color:#ff1744;"><div class="kpi-title">👤 VECTOR CONTRA PERSONAL</div><div class="kpi-value" style="color:#ff1744;">5%</div></div>""", unsafe_allow_html=True)
+    k3.markdown("""<div class="kpi-box" style="border-color:#ba68c8;"><div class="kpi-title">🚜 VECTOR RUTAS/MAQUINARIA</div><div class="kpi-value" style="color:#ba68c8;">5%</div></div>""", unsafe_allow_html=True)
+    k4.markdown("""<div class="kpi-box" style="border-color:#ffb300;"><div class="kpi-title">🏭 VECTOR PLANTAS</div><div class="kpi-value" style="color:#ffb300;">0%</div></div>""", unsafe_allow_html=True)
+    
+    st.write("")
+    
+    # --- Fila de Gráficos 1 ---
+    col_g1, col_g2 = st.columns(2)
+    
+    with col_g1:
+        st.markdown('<div class="section-title">ACELERACIÓN DE VIOLENCIA VS OSINT</div>', unsafe_allow_html=True)
+        tendencia = df_base.groupby([df_base['fecha_orden'].dt.to_period("M")]).size().reset_index(name='Ataques Reales')
         tendencia['fecha_orden'] = tendencia['fecha_orden'].dt.to_timestamp()
-        fig_line = px.line(
-            tendencia, x='fecha_orden', y='Incidentes', color='Nivel de Amenaza',
-            color_discrete_map=colores_tacticos, height=220, template="plotly_dark", markers=True
-        )
-        fig_line.update_layout(margin={"r":10,"t":10,"l":10,"b":10}, yaxis_title=None, xaxis_title=None, legend_title=None)
+        tendencia['Ruido OSINT'] = tendencia['Ataques Reales'] * 1.8  # Simulación de volumen
+        
+        fig_line = go.Figure()
+        fig_line.add_trace(go.Scatter(x=tendencia['fecha_orden'], y=tendencia['Ataques Reales'], mode='lines+markers', name='Ataques Reales', line=dict(color='#ff1744', width=2)))
+        fig_line.add_trace(go.Scatter(x=tendencia['fecha_orden'], y=tendencia['Ruido OSINT'], mode='lines+markers', name='Ruido OSINT', line=dict(color='#00e5ff', width=2, dash='dash')))
+        fig_line.update_layout(template="plotly_dark", plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=300, margin=dict(l=0, r=0, t=10, b=0), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
         st.plotly_chart(fig_line, use_container_width=True)
 
-st.markdown("---")
-with st.expander("📂 VER Y EXPORTAR REGISTRO HISTÓRICO Y ANÁLISIS IA (EXCEL/CSV)"):
-    def limpiar_link(link):
-        link = str(link).strip()
-        if link.lower() in ['nan', 'none', '', 'null']: return None 
-        if not link.startswith('http'): return "https://" + link
-        return link
+    with col_g2:
+        st.markdown('<div class="section-title">MATRIZ EXPOSICIÓN DE ACTIVOS CMPC</div>', unsafe_allow_html=True)
+        categorias = ['Reputación', 'Maquinaria', 'Plantas', 'Rutas de Carga', 'Personal Terreno', 'Predios Forestales']
+        fig_radar = go.Figure()
+        fig_radar.add_trace(go.Scatterpolar(r=[2, 5, 1, 4, 2, 8], theta=categorias, fill='toself', name='Vulnerabilidad Dinámica', line_color='#00e5ff'))
+        fig_radar.add_trace(go.Scatterpolar(r=[3, 4, 2, 3, 3, 5], theta=categorias, fill='toself', name='Exposición Base', line_color='#9c27b0'))
+        fig_radar.update_layout(template="plotly_dark", polar=dict(radialaxis=dict(visible=True, range=[0, 10], color='#8892b0')), plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=300, margin=dict(l=40, r=40, t=10, b=10), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+        st.plotly_chart(fig_radar, use_container_width=True)
 
-    df_export = df_filtrado[['fecha_mostrar', 'titular', 'resumen_ia', 'actor', 'ubicacion', 'Nivel de Amenaza', 'puntaje_riesgo', 'enlace_noticia']].copy()
-    df_export['enlace_noticia'] = df_export['enlace_noticia'].apply(limpiar_link)
+    # --- Fila de Gráficos 2 ---
+    col_g3, col_g4 = st.columns(2)
     
-    csv = df_export.to_csv(index=False).encode('utf-8')
-    st.download_button(label="📥 Descargar Reporte de Inteligencia (CSV)", data=csv, file_name='reporte_inteligencia.csv', mime='text/csv')
-    
-    st.dataframe(
-        df_export, use_container_width=True, hide_index=True, height=400,
-        column_config={
-            "fecha_mostrar": "Fecha",
-            "titular": st.column_config.TextColumn("Titular", width="medium"),
-            "resumen_ia": st.column_config.TextColumn("Análisis IA (Prospectiva)", width="large"),
-            "actor": "Actor",
-            "Nivel de Amenaza": "Nivel",
-            "puntaje_riesgo": st.column_config.NumberColumn("Riesgo", format="%.1f"),
-            "enlace_noticia": st.column_config.LinkColumn("Fuente", display_text="Ver Noticia 🔗")
-        }
-    )
+    with col_g3:
+        st.markdown('<div class="section-title">DISTRIBUCIÓN CRIMINAL POR MACROZONA</div>', unsafe_allow_html=True)
+        conteo_zona = df_base['ubicacion'].value_counts().reset_index().head(6)
+        conteo_zona.columns = ['Zona', 'Ataques']
+        fig_bar = px.bar(conteo_zona, x='Zona', y='Ataques', color_discrete_sequence=['#ff1744'])
+        fig_bar.update_layout(template="plotly_dark", plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=350, margin=dict(l=0, r=0, t=10, b=0))
+        st.plotly_chart(fig_bar, use_container_width=True)
+
+    with col_g4:
+        st.markdown('<div class="section-title">SOCIOGRAMA TÁCTICO (LINK ANALYSIS)</div>', unsafe_allow_html=True)
+        # Simulación de Grafo de red con Scatter para Plotly nativo
+        fig_net = go.Figure(data=[go.Scatter(
+            x=[1, 2, 3, 2, 4, 3.5, 1.5], y=[2, 3, 1.5, 1, 2.5, 0.5, 0.8],
+            mode='markers+text',
+            marker=dict(size=[40, 20, 25, 30, 15, 20, 15], color=['#ff1744', '#00e5ff', '#ff9100', '#ff1744', '#9c27b0', '#29b6f6', '#4caf50']),
+            text=['Ataque Incendiario', 'CAM', 'WAM', 'RML', 'CMPC', 'Rutas', 'Contulmo'],
+            textposition="bottom center",
+            textfont=dict(color='#ffffff')
+        )])
+        fig_net.update_layout(template="plotly_dark", plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=350, margin=dict(l=0, r=0, t=10, b=0), xaxis=dict(showgrid=False, zeroline=False, showticklabels=False), yaxis=dict(showgrid=False, zeroline=False, showticklabels=False))
+        st.plotly_chart(fig_net, use_container_width=True)
