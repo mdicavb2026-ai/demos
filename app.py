@@ -19,11 +19,10 @@ def load_data():
     
     if not df.empty and 'fecha' in df.columns:
         df['fecha_orden'] = pd.to_datetime(df['fecha'], errors='coerce')
-        df = df.dropna(subset=['fecha_orden']).copy() # Filtrar fechas corruptas
+        df = df.dropna(subset=['fecha_orden']).copy()
         df = df.sort_values(by='fecha_orden', ascending=False)
         df['fecha_mostrar'] = df['fecha_orden'].dt.strftime('%d/%m/%Y')
         
-        # Asignación de Nivel de Amenaza Integrado
         def clasificar_riesgo(row):
             texto_analisis = str(row.get('titular', '')).upper() + " " + str(row.get('resumen_ia', '')).upper() + " " + str(row.get('actor', '')).upper()
             try:
@@ -53,16 +52,13 @@ if df_base.empty:
 st.sidebar.markdown("# 🛡️ WAR ROOM")
 st.sidebar.markdown("## ⚙️ Centro de Comando")
 
-# Filtro de Fechas
 fecha_min = df_base['fecha_orden'].min().date()
 fecha_max = df_base['fecha_orden'].max().date()
 rango_fechas = st.sidebar.date_input("Filtrar por Ventana Temporal", [fecha_min, fecha_max], min_value=fecha_min, max_value=fecha_max)
 
-# Filtro de Amenaza
 niveles_disponibles = df_base['Nivel de Amenaza'].unique().tolist()
 filtro_nivel = st.sidebar.multiselect("Nivel de Alerta", niveles_disponibles, default=niveles_disponibles)
 
-# Aplicar Filtros
 df_filtrado = df_base[df_base['Nivel de Amenaza'].isin(filtro_nivel)]
 if len(rango_fechas) == 2:
     df_filtrado = df_filtrado[(df_filtrado['fecha_orden'].dt.date >= rango_fechas[0]) & (df_filtrado['fecha_orden'].dt.date <= rango_fechas[1])]
@@ -70,7 +66,6 @@ if len(rango_fechas) == 2:
 # 5. INTERFAZ UI - WAR ROOM
 st.title("🛡️ Sistema de Inteligencia y Prospectiva C5I")
 
-# --- KPIs ---
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("Alertas en Rango", len(df_filtrado))
 c2.metric("Incidentes Críticos", len(df_filtrado[df_filtrado['Nivel de Amenaza'] == 'Crítico']))
@@ -79,14 +74,13 @@ c4.metric("Última Alerta", df_filtrado['fecha_mostrar'].iloc[0] if not df_filtr
 
 st.markdown("---")
 
-# --- MAPA Y GRÁFICO PRINCIPAL ---
-col_mapa, col_grafico = st.columns([6, 4]) # 60% Mapa, 40% Gráfico
+col_mapa, col_grafico = st.columns([6, 4])
 
 with col_mapa:
     st.markdown("#### 📍 Despliegue Táctico Territorial")
     df_mapa = df_filtrado.dropna(subset=['latitud', 'longitud']).copy()
     if not df_mapa.empty:
-       fig_mapa = px.scatter_mapbox(
+        fig_mapa = px.scatter_mapbox(
             df_mapa, 
             lat="latitud", 
             lon="longitud", 
@@ -110,11 +104,10 @@ with col_mapa:
             size="Magnitud", 
             size_max=16,
             color_discrete_map={'Crítico': '#ff0000', 'Alto': '#ff8800', 'Medio': '#e0e000'},
-            zoom=6.5, 
-            height=550
+            zoom=6.2, 
+            height=500
         )
         fig_mapa.update_layout(mapbox_style="carto-darkmatter", margin={"r":0,"t":0,"l":0,"b":0})
-        # AQUÍ ESTÁ LA MAGIA DEL ZOOM: config={'scrollZoom': True}
         st.plotly_chart(fig_mapa, use_container_width=True, config={'scrollZoom': True, 'displayModeBar': False})
 
 with col_grafico:
@@ -142,10 +135,8 @@ with col_grafico:
         fig_line.update_layout(margin={"r":10,"t":10,"l":10,"b":10}, yaxis_title=None, xaxis_title=None, legend_title=None)
         st.plotly_chart(fig_line, use_container_width=True)
 
-# --- REPORTE Y DESCARGA (Oculto en un panel expandible) ---
 st.markdown("---")
 with st.expander("📂 VER Y EXPORTAR REGISTRO HISTÓRICO COMPLETO"):
-    
     def limpiar_link(link):
         link = str(link).strip()
         if link.lower() in ['nan', 'none', '', 'null']: return None 
@@ -155,7 +146,6 @@ with st.expander("📂 VER Y EXPORTAR REGISTRO HISTÓRICO COMPLETO"):
     df_export = df_filtrado[['fecha_mostrar', 'titular', 'actor', 'ubicacion', 'Nivel de Amenaza', 'puntaje_riesgo', 'enlace_noticia']].copy()
     df_export['enlace_noticia'] = df_export['enlace_noticia'].apply(limpiar_link)
     
-    # Botón de Descarga
     csv = df_export.to_csv(index=False).encode('utf-8')
     st.download_button(
         label="📥 Descargar Reporte Filtrado (CSV para Excel)",
@@ -164,7 +154,6 @@ with st.expander("📂 VER Y EXPORTAR REGISTRO HISTÓRICO COMPLETO"):
         mime='text/csv',
     )
     
-    # Tabla visual pulida
     st.dataframe(
         df_export, 
         use_container_width=True, hide_index=True, height=300,
