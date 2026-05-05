@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 from supabase import create_client, Client
 import plotly.express as px
-import numpy as np
 
 # 1. Configuracion de pagina (Bunker mode)
 st.set_page_config(page_title="War Room CMPC", page_icon="🛡️", layout="wide", initial_sidebar_state="collapsed")
@@ -19,10 +18,8 @@ def load_data():
     df = pd.DataFrame(response.data)
     
     if not df.empty and 'fecha' in df.columns:
-        # Convertir a fecha para ordenar, pero guardando una copia limpia para mostrar
         df['fecha_orden'] = pd.to_datetime(df['fecha'], errors='coerce')
         df = df.sort_values(by='fecha_orden', ascending=False)
-        # Crear una columna de fecha en formato DD/MM/YYYY, y si es nula, poner "Sin registro"
         df['fecha_mostrar'] = df['fecha_orden'].dt.strftime('%d/%m/%Y').fillna('Sin registro')
     else:
         df['fecha_mostrar'] = 'Sin registro'
@@ -48,7 +45,6 @@ else:
                  df['resumen_ia'].str.contains('CMPC|Mininco', case=False, na=False)]
     col2.metric("Alertas Críticas (Infraestructura Propia)", len(df_cmpc))
     
-    # Buscar la última fecha válida para el KPI
     fechas_validas = df[df['fecha_mostrar'] != 'Sin registro']['fecha_mostrar']
     ultima_fecha = fechas_validas.iloc[0] if not fechas_validas.empty else "Desconocida"
     col3.metric("Última Alerta Procesada", ultima_fecha)
@@ -74,13 +70,25 @@ else:
                 
         df_mapa['Nivel de Amenaza'] = df_mapa.apply(get_color, axis=1)
         
+        # Tamaño dinámico de los círculos según el riesgo
+        def get_size(row):
+            try:
+                r = float(row.get('puntaje_riesgo', 1.0))
+                return r if r > 0 else 1.0
+            except:
+                return 1.0
+                
+        df_mapa['Magnitud'] = df_mapa.apply(get_size, axis=1)
+        
         fig = px.scatter_mapbox(
             df_mapa, 
             lat="latitud", 
             lon="longitud", 
             hover_name="titular",
-            hover_data={"fecha_mostrar": True, "actor": True, "ubicacion": True, "Nivel de Amenaza": False, "latitud": False, "longitud": False},
+            hover_data={"fecha_mostrar": True, "actor": True, "ubicacion": True, "Nivel de Amenaza": False, "Magnitud": False, "latitud": False, "longitud": False},
             color="Nivel de Amenaza",
+            size="Magnitud", # Activación del tamaño dinámico
+            size_max=16,     # Tamaño máximo del círculo en pantalla
             color_discrete_map={'Crítico': 'red', 'Alto': 'orange', 'Medio': '#e0e000'},
             zoom=6.5, 
             height=550
@@ -91,16 +99,21 @@ else:
     # --- Tabla de Datos (Diseño Pulido) ---
     st.subheader("📋 Registro Histórico")
     
-    # Preparar datos limpios para la tabla
     df_mostrar = df[['fecha_mostrar', 'titular', 'actor', 'ubicacion', 'puntaje_riesgo', 'enlace_noticia']].copy()
     
-    # Limpiar los links vacíos o que dicen "nan" desde Excel
-    df_mostrar['enlace_noticia'] = df_mostrar['enlace_noticia'].fillna("").astype(str)
-    df_mostrar['enlace_noticia'] = df_mostrar['enlace_noticia'].replace({'nan': '', 'None': ''})
-    # Asegurar que si hay link, empiece con http para que no se rompa el click
-    df_mostrar['enlace_noticia'] = df_mostrar['enlace_noticia'].apply(lambda x: x if x == "" or str(x).startswith("http") else "https://" + str(x))
+    # Aniquilación de enlaces fantasma
+    def limpiar_link(link):
+        link = str(link).strip()
+        # Si la celda está vacía o es basura, retornamos None para que Streamlit oculte el botón
+        if link.lower() in ['nan', 'none', '', 'null']:
+            return None 
+        # Aseguramos el formato URL
+        if not link.startswith('http'):
+            return "https://" + link
+        return link
 
-    # Renderizar tabla con configuración visual de columnas
+    df_mostrar['enlace_noticia'] = df_mostrar['enlace_noticia'].apply(limpiar_link)
+
     st.dataframe(
         df_mostrar, 
         use_container_width=True, 
