@@ -86,12 +86,32 @@ with col_mapa:
     st.markdown("#### 📍 Despliegue Táctico Territorial")
     df_mapa = df_filtrado.dropna(subset=['latitud', 'longitud']).copy()
     if not df_mapa.empty:
-        fig_mapa = px.scatter_mapbox(
-            df_mapa, lat="latitud", lon="longitud", hover_name="titular",
-            hover_data={"fecha_mostrar": True, "actor": True, "Nivel de Amenaza": False, "Magnitud": False, "latitud": False, "longitud": False},
-            color="Nivel de Amenaza", size="Magnitud", size_max=18,
+       fig_mapa = px.scatter_mapbox(
+            df_mapa, 
+            lat="latitud", 
+            lon="longitud", 
+            hover_name="titular",
+            hover_data={
+                "fecha_mostrar": True, 
+                "actor": True, 
+                "ubicacion": True,
+                "Nivel de Amenaza": True, 
+                "Magnitud": False, 
+                "latitud": False, 
+                "longitud": False
+            },
+            labels={
+                "fecha_mostrar": "Fecha",
+                "actor": "Actor",
+                "ubicacion": "Ubicación",
+                "Nivel de Amenaza": "Nivel"
+            },
+            color="Nivel de Amenaza",
+            size="Magnitud", 
+            size_max=16,
             color_discrete_map={'Crítico': '#ff0000', 'Alto': '#ff8800', 'Medio': '#e0e000'},
-            zoom=6.2, height=500
+            zoom=6.5, 
+            height=550
         )
         fig_mapa.update_layout(mapbox_style="carto-darkmatter", margin={"r":0,"t":0,"l":0,"b":0})
         # AQUÍ ESTÁ LA MAGIA DEL ZOOM: config={'scrollZoom': True}
