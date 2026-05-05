@@ -6,6 +6,7 @@ import plotly.graph_objects as go
 from collections import Counter
 import re
 from datetime import datetime, timedelta
+import networkx as nx
 
 # --- CONFIGURACIÓN ---
 st.set_page_config(page_title="WAR ROOM CMPC", page_icon="🛡️", layout="wide", initial_sidebar_state="collapsed")
@@ -39,7 +40,8 @@ def load_data():
     response = supabase.table("inteligencia_tactica").select("*").execute()
     df = pd.DataFrame(response.data)
     if not df.empty and 'fecha' in df.columns:
-        df['fecha_orden'] = pd.to_datetime(df['fecha'], errors='coerce')
+        # FIX ZONA HORARIA: Removemos la zona horaria para que todas sean "naives" y compatibles
+        df['fecha_orden'] = pd.to_datetime(df['fecha'], errors='coerce').dt.tz_localize(None)
         df = df.dropna(subset=['fecha_orden']).sort_values(by='fecha_orden', ascending=False)
         df['fecha_mostrar'] = df['fecha_orden'].dt.strftime('%d/%m/%Y')
         df['Nivel de Amenaza'] = df['nivel_alerta'].fillna('BAJO').str.upper()
@@ -64,10 +66,11 @@ st.sidebar.markdown("## ⚙️ CENTRO DE COMANDO")
 opciones_tiempo = {"Histórico Global": 3650, "Último Año": 365, "Últimos 6 Meses": 180, "Últimos 3 Meses": 90, "Último Mes": 30, "Última Semana": 7}
 seleccion_tiempo = st.sidebar.selectbox("Período Temporal", list(opciones_tiempo.keys()))
 dias_restar = opciones_tiempo[seleccion_tiempo]
-fecha_limite = datetime.now() - timedelta(days=dias_restar)
+# Creamos la fecha límite sin zona horaria para emparejar con el df
+fecha_limite = (datetime.now() - timedelta(days=dias_restar)).replace(tzinfo=None)
 
 # Aplicar filtro de fecha
-df_filtrado = df_base[df_base['fecha_orden'] >= pd.to_datetime(fecha_limite, utc=True)]
+df_filtrado = df_base[df_base['fecha_orden'] >= fecha_limite]
 
 # 2. Filtro de Orgánica (Actor)
 lista_actores = ["TODAS"] + sorted([a for a in df_filtrado['actor'].unique() if str(a).lower() not in ["desconocido", "null", "none", ""]])
@@ -77,7 +80,7 @@ if actor_seleccionado != "TODAS":
     df_filtrado = df_filtrado[df_filtrado['actor'] == actor_seleccionado]
 
 # --- HEADER GLOBAL ---
-st.markdown(f"**WAR ROOM CMPC** • V9.50 | Vista: **{seleccion_tiempo.upper()}** | Eventos Procesados: **{len(df_filtrado)}**")
+st.markdown(f"**WAR ROOM CMPC** • V9.60 | Vista: **{seleccion_tiempo.upper()}** | Eventos Procesados: **{len(df_filtrado)}**")
 tab_tactico, tab_prospectiva, tab_informe = st.tabs(["🎯 TÁCTICO", "📊 PROSPECTIVA", "📥 INFORME AUTOMÁTICO"])
 
 colores_tacticos = {'CRÍTICO': '#ff1744', 'ALTO': '#ff9100', 'MEDIO': '#29b6f6', 'BAJO': '#4caf50'}
@@ -123,7 +126,6 @@ with tab_tactico:
             color="Nivel de Amenaza", size="Magnitud", size_max=14,
             color_discrete_map=colores_tacticos, zoom=6.5, height=750
         )
-        # Reactivado el scrollZoom y panel oscuro
         fig_mapa.update_layout(
             mapbox_style="carto-darkmatter", margin={"r":0,"t":0,"l":0,"b":0},
             hoverlabel=dict(bgcolor="#1E1E1E", font_size=12), showlegend=False
@@ -142,10 +144,9 @@ with tab_tactico:
         st.dataframe(actores.head(6), hide_index=True, use_container_width=True)
         
         st.markdown('<div class="section-title">TRENDING KEYWORDS (BIGRAMAS)</div>', unsafe_allow_html=True)
-        # Generador de Bigramas y Trigramas dinámicos (Nube de Palabras en HTML)
         titulares_unidos = " ".join(df_filtrado['palabra_clave'].dropna().tolist() + df_filtrado['titular'].dropna().tolist()).lower()
         palabras = re.findall(r'\b[a-záéíóúñ]{4,}\b', titulares_unidos)
-        ruido = ['para', 'como', 'sobre', 'entre', 'desde', 'hasta', 'este', 'esta']
+        ruido = ['para', 'como', 'sobre', 'entre', 'desde', 'hasta', 'este', 'esta', 'pero', 'sean']
         palabras_utiles = [p for p in palabras if p not in ruido]
         
         bigramas = [f"{palabras_utiles[i]} {palabras_utiles[i+1]}" for i in range(len(palabras_utiles)-1)]
@@ -155,11 +156,10 @@ with tab_tactico:
         if conteo_bigramas:
             max_val = conteo_bigramas[0][1]
             for frase, freq in conteo_bigramas:
-                # Calcular tamaño dinámico entre 12px y 24px según frecuencia
                 size = max(12, int((freq / max_val) * 24))
                 nube_html += f"<span style='color:#4fc3f7; font-size:{size}px; font-weight:bold;'>#{frase.title().replace(' ', '')}</span>"
         else:
-            nube_html += "<span style='color:#8892b0;'>Sin datos suficientes para tendencia</span>"
+            nube_html += "<span style='color:#8892b0;'>Sin datos suficientes</span>"
         nube_html += "</div>"
         st.markdown(nube_html, unsafe_allow_html=True)
 
@@ -170,7 +170,6 @@ with tab_prospectiva:
     st.markdown("### INTELIGENCIA PROSPECTIVA OSINT", unsafe_allow_html=True)
     
     k1, k2, k3, k4 = st.columns(4)
-    # Ejemplo de cálculo rápido para KPIs (Ajustable a tus variables operativas)
     ataques_predio = len(df_filtrado[df_filtrado['titular'].str.contains('predio|fundo', case=False, na=False)])
     k1.markdown(f"""<div class="kpi-box" style="border-color:#4caf50;"><div class="kpi-title">🌲 EVENTOS PREDIALES</div><div class="kpi-value" style="color:#4caf50;">{ataques_predio}</div></div>""", unsafe_allow_html=True)
     k2.markdown("""<div class="kpi-box" style="border-color:#ff1744;"><div class="kpi-title">👤 VECTOR CONTRA PERSONAL</div><div class="kpi-value" style="color:#ff1744;">N/A</div></div>""", unsafe_allow_html=True)
@@ -181,29 +180,84 @@ with tab_prospectiva:
     col_g1, col_g2 = st.columns(2)
     
     with col_g1:
-        st.markdown('<div class="section-title">ACELERACIÓN DE VIOLENCIA</div>', unsafe_allow_html=True)
-        if not df_filtrado.empty:
-            tendencia = df_filtrado.groupby([df_filtrado['fecha_orden'].dt.to_period("W")]).size().reset_index(name='Ataques')
-            tendencia['fecha_orden'] = tendencia['fecha_orden'].dt.to_timestamp()
-            fig_line = px.line(tendencia, x='fecha_orden', y='Ataques', markers=True, color_discrete_sequence=['#ff1744'])
-            fig_line.update_layout(template="plotly_dark", plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=300, margin=dict(l=0, r=0, t=10, b=0))
-            st.plotly_chart(fig_line, use_container_width=True)
-
-    with col_g2:
         st.markdown('<div class="section-title">DISTRIBUCIÓN POR MACROZONA</div>', unsafe_allow_html=True)
         if not df_filtrado.empty:
             conteo_zona = df_filtrado['ubicacion'].value_counts().reset_index().head(6)
             conteo_zona.columns = ['Zona', 'Ataques']
-            fig_bar = px.bar(conteo_zona, x='Zona', y='Ataques', color_discrete_sequence=['#ff1744'])
-            fig_bar.update_layout(template="plotly_dark", plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=300, margin=dict(l=0, r=0, t=10, b=0))
+            # Paleta de colores más variada para no saturar
+            fig_bar = px.bar(conteo_zona, x='Zona', y='Ataques', color='Zona', color_discrete_sequence=['#ff1744', '#ff9100', '#ffd54f', '#4fc3f7', '#29b6f6', '#4caf50'])
+            fig_bar.update_layout(template="plotly_dark", plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=350, margin=dict(l=0, r=0, t=10, b=0), showlegend=False)
             st.plotly_chart(fig_bar, use_container_width=True)
+
+    with col_g2:
+        st.markdown('<div class="section-title">SOCIOGRAMA TÁCTICO (ANÁLISIS DE VÍNCULOS REAL)</div>', unsafe_allow_html=True)
+        if not df_filtrado.empty:
+            # Construcción del grafo de red dinámico
+            G = nx.Graph()
+            node_sizes = {}
+            
+            for _, row in df_filtrado.iterrows():
+                actor = str(row.get('actor', '')).strip()
+                ubi = str(row.get('ubicacion', '')).strip()
+                if not actor or actor.lower() in ['desconocido', 'none']: continue
+                if not ubi or ubi.lower() in ['macrozona sur', 'none']: continue
+                
+                # Frecuencias para el tamaño
+                node_sizes[actor] = node_sizes.get(actor, 0) + 1
+                node_sizes[ubi] = node_sizes.get(ubi, 0) + 1
+                
+                # Añadir conexión (línea)
+                if G.has_edge(actor, ubi):
+                    G[actor][ubi]['weight'] += 1
+                else:
+                    G.add_edge(actor, ubi, weight=1)
+            
+            if G.nodes():
+                pos = nx.spring_layout(G, k=0.8, iterations=50) # Coordenadas matemáticas
+                
+                # Dibujar las líneas
+                edge_x, edge_y = [], []
+                for edge in G.edges():
+                    x0, y0 = pos[edge[0]]
+                    x1, y1 = pos[edge[1]]
+                    edge_x.extend([x0, x1, None])
+                    edge_y.extend([y0, y1, None])
+                
+                edge_trace = go.Scatter(x=edge_x, y=edge_y, line=dict(width=0.8, color='#8892b0'), hoverinfo='none', mode='lines')
+                
+                # Dibujar los nodos
+                node_x, node_y, node_text, node_size, node_color = [], [], [], [], []
+                for node in G.nodes():
+                    x, y = pos[node]
+                    node_x.append(x)
+                    node_y.append(y)
+                    node_text.append(node)
+                    # Tamaño dinámico basado en ataques reales
+                    node_size.append(min(15 + (node_sizes[node] * 4), 60)) 
+                    # Orgánicas en rojo, Ubicaciones en azul
+                    node_color.append('#ff1744' if node in df_filtrado['actor'].unique() else '#4fc3f7')
+
+                node_trace = go.Scatter(
+                    x=node_x, y=node_y, mode='markers+text', text=node_text, textposition="bottom center",
+                    hoverinfo='text', marker=dict(size=node_size, color=node_color, line=dict(width=2, color='#ffffff'))
+                )
+                
+                fig_net = go.Figure(data=[edge_trace, node_trace])
+                fig_net.update_layout(
+                    template="plotly_dark", plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+                    xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+                    yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+                    margin=dict(l=0, r=0, t=10, b=0), height=350, showlegend=False
+                )
+                st.plotly_chart(fig_net, use_container_width=True)
+            else:
+                st.info("No hay suficientes vínculos (Actor -> Ubicación) para trazar la red.")
 
 # ==========================================
 # PESTAÑA 3: INFORME AUTOMÁTICO
 # ==========================================
 with tab_informe:
     st.markdown("### 📥 GENERADOR DE INFORMES C5I")
-    st.markdown("Extraiga la matriz de inteligencia procesada en formato compatible con Excel o herramientas de visualización corporativa.")
     
     def limpiar_link(link):
         link = str(link).strip()
@@ -214,7 +268,7 @@ with tab_informe:
     df_export = df_filtrado[['fecha_mostrar', 'titular', 'actor', 'accion_digital', 'ubicacion', 'Nivel de Amenaza', 'resumen_ia', 'enlace_noticia']].copy()
     df_export['enlace_noticia'] = df_export['enlace_noticia'].apply(limpiar_link)
     
-    csv = df_export.to_csv(index=False, sep=';', encoding='utf-8-sig').encode('utf-8-sig') # Formato seguro para Excel Español
+    csv = df_export.to_csv(index=False, sep=';', encoding='utf-8-sig').encode('utf-8-sig') 
     
     st.download_button(
         label="📥 DESCARGAR MATRIZ CSV (APTO PARA EXCEL)",
