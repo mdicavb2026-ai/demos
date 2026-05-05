@@ -50,7 +50,7 @@ if df_base.empty:
     st.stop()
 
 # 4. FILTROS TÁCTICOS (Panel Lateral)
-st.sidebar.image("https://upload.wikimedia.org/wikipedia/commons/thumb/c/ca/CMPC_logo.svg/1200px-CMPC_logo.svg.png", width=150)
+st.sidebar.markdown("# 🛡️ WAR ROOM")
 st.sidebar.markdown("## ⚙️ Centro de Comando")
 
 # Filtro de Fechas
