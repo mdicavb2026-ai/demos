@@ -37,7 +37,7 @@ else:
     col1, col2, col3 = st.columns(3)
     col1.metric("Total Alertas Registradas", len(df))
     
-    # Logica de clasificacion estricta CMPC
+    # Logica de clasificacion estricta
     df_cmpc = df[df['titular'].str.contains('CMPC|Mininco', case=False, na=False) | 
                  df['actor'].str.contains('CMPC|Mininco', case=False, na=False) |
                  df['resumen_ia'].str.contains('CMPC|Mininco', case=False, na=False)]
@@ -51,12 +51,19 @@ else:
     
     df_mapa = df.dropna(subset=['latitud', 'longitud'])
     if not df_mapa.empty:
-        # Forzar color rojo para CMPC y naranja para el resto
+        # Forzar color rojo para alertas críticas y evaluar el resto de forma segura
         def get_color(row):
             texto_analisis = str(row['titular']).upper() + " " + str(row['resumen_ia']).upper() + " " + str(row['actor']).upper()
+            
+            # Escudo: Transformar el riesgo a número de forma segura
+            try:
+                riesgo = float(row['puntaje_riesgo'])
+            except (ValueError, TypeError):
+                riesgo = 1.0 # Si está vacío o hay error, asume riesgo mínimo
+                
             if 'CMPC' in texto_analisis or 'MININCO' in texto_analisis:
-                return 'Crítico (CMPC)'
-            elif row['puntaje_riesgo'] >= 6:
+                return 'Crítico'
+            elif riesgo >= 6:
                 return 'Alto'
             else:
                 return 'Medio'
@@ -70,7 +77,7 @@ else:
             hover_name="titular",
             hover_data={"fecha": True, "actor": True, "ubicacion": True, "Nivel de Amenaza": False, "latitud": False, "longitud": False},
             color="Nivel de Amenaza",
-            color_discrete_map={'Crítico (CMPC)': 'red', 'Alto': 'orange', 'Medio': '#e0e000'},
+            color_discrete_map={'Crítico': 'red', 'Alto': 'orange', 'Medio': '#e0e000'},
             zoom=6.5, 
             height=550
         )
