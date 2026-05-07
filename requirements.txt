@@ -4,3 +4,6 @@ supabase
 plotly
 networkx
 python-docx
+openpyxl
+beautifulsoup4
+kaleido
