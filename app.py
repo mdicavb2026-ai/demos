@@ -48,10 +48,16 @@ def get_osint_data():
 
 @st.cache_data
 def get_layers_data():
-    # 3.1 Extractor Excel CMPC
+    # 3.1 Extractor Excel CMPC con Filtro de Saneamiento
     try:
         fundos = pd.read_excel('FUNDOS_COMPLEJIDADyRIESGO_20250409.xlsx')
         fundos = fundos.dropna(subset=['F_LATITUD', 'F_LONGITUD'])
+        
+        # Saneamiento de caracteres invisibles para evitar SyntaxError JSON en Plotly
+        if 'NOM_FUNDO' in fundos.columns:
+            fundos['NOM_FUNDO'] = fundos['NOM_FUNDO'].astype(str).apply(lambda x: ''.join(c for c in x if c.isprintable()))
+        if 'DSC_COMPLE' in fundos.columns:
+            fundos['DSC_COMPLE'] = fundos['DSC_COMPLE'].astype(str).apply(lambda x: ''.join(c for c in x if c.isprintable()))
     except Exception as e:
         st.error(f"Error cargando Activos CMPC (Excel): {e}")
         fundos = pd.DataFrame()
@@ -66,13 +72,12 @@ def get_layers_data():
             desc_tag = p.find('description')
             desc_text = desc_tag.text if desc_tag else ""
             
-            # Caza de fechas con Regex
             fecha_hist = "Sin Fecha"
             match_fecha = re.search(r'(\d{2}-\d{2}-\d{4}|\d{2}-\d{2}-\d{2})', desc_text)
             if match_fecha: fecha_hist = match_fecha.group(1)
             
-            # Limpieza de descripción para el Tooltip
             desc_limpia = re.sub(r'<[^>]+>', ' ', desc_text).replace('descripción:', '').replace('tessellate:', '').strip()
+            desc_limpia = ''.join(c for c in desc_limpia if c.isprintable())
             
             coords = p.find('coordinates')
             if coords:
@@ -120,7 +125,6 @@ t1, t2, t3 = st.tabs(["🎯 MAPA GEOINT & FEED", "📊 PROSPECTIVA & HISTÓRICO"
 # ==========================================
 with t1:
     st.markdown("### SELECCIÓN DE CAPAS GEOESPACIALES")
-    # Selector de capas obligatorio
     capas_seleccionadas = st.multiselect(
         "Filtre las dimensiones de inteligencia a desplegar en el mapa:",
         ["🚨 OSINT (Alertas Vivas)", "📜 Histórico (2020-2025)", "🏭 ACTIVOS CMPC (Predios)"],
@@ -130,10 +134,8 @@ with t1:
     c1, c2 = st.columns([7, 3])
     
     with c1:
-        # CONSTRUCCIÓN DEL MAPA MILITAR
         fig_map = go.Figure()
 
-        # Capa Histórica KML
         if "📜 Histórico (2020-2025)" in capas_seleccionadas and not df_kml.empty:
             fig_map.add_trace(go.Scattermapbox(
                 lat=df_kml['lat'], lon=df_kml['lon'], mode='markers',
@@ -142,16 +144,14 @@ with t1:
                 hoverinfo='text', name='Histórico (KML)'
             ))
 
-        # Capa CMPC
         if "🏭 ACTIVOS CMPC (Predios)" in capas_seleccionadas and not df_fundos.empty:
             fig_map.add_trace(go.Scattermapbox(
                 lat=df_fundos['F_LATITUD'], lon=df_fundos['F_LONGITUD'], mode='markers',
                 marker=dict(size=7, color='#4caf50', opacity=0.8),
-                text="🌲 " + df_fundos['NOM_FUNDO'] + "<br>Riesgo/Complejidad: " + df_fundos.get('DSC_COMPLE', 'N/A').astype(str),
+                text="🌲 " + df_fundos['NOM_FUNDO'] + "<br>Nivel de Riesgo: " + df_fundos.get('DSC_COMPLE', 'N/A').astype(str),
                 hoverinfo='text', name='Activos CMPC'
             ))
 
-        # Capa OSINT
         if "🚨 OSINT (Alertas Vivas)" in capas_seleccionadas and not df_f.empty:
             df_vivo = df_f.dropna(subset=['latitud', 'longitud'])
             col_map = {'CRÍTICO': '#ff1744', 'ALTO': '#ff9100', 'MEDIO': '#29b6f6'}
@@ -165,7 +165,6 @@ with t1:
                         hoverinfo='text', name=f'OSINT: {nivel}'
                     ))
 
-        # LEYENDA ABAJO A LA DERECHA Y ZOOM
         fig_map.update_layout(
             mapbox_style="carto-darkmatter",
             margin=dict(l=0, r=0, t=0, b=0),
@@ -199,11 +198,8 @@ with t1:
 # ==========================================
 with t2:
     st.markdown("### 📊 ANÁLISIS PREDICTIVO (HISTÓRICO + OSINT)")
-    
-    # KPIs DE PROBABILIDAD (FUSIONANDO KML Y OSINT)
     st.markdown('<div class="seccion-titulo">PROBABILIDAD DE ATAQUE POR VECTOR (BASE HISTÓRICA Y TENDENCIA)</div>', unsafe_allow_html=True)
     
-    # Cálculos algorítmicos para simular la probabilidad cruzando historial y noticias recientes
     total_historico = len(df_kml) if not df_kml.empty else 1
     total_reciente = len(df_f) if not df_f.empty else 1
     
@@ -226,7 +222,6 @@ with t2:
             df_v = df_f.groupby(df_f['fecha_dt'].dt.date).size().reset_index(name='Ataques OSINT')
             fig_1 = go.Figure()
             fig_1.add_trace(go.Scatter(x=df_v['fecha_dt'], y=df_v['Ataques OSINT'], mode='lines+markers', name='Eventos Recientes', line=dict(color='#ff1744')))
-            # Agregamos una línea base de promedio histórico
             promedio_historico = len(df_kml) / (5 * 365) * 7 if not df_kml.empty else 1
             fig_1.add_hline(y=promedio_historico, line_dash="dash", line_color="#8892b0", annotation_text="Línea Base Histórica")
             fig_1.update_layout(template="plotly_dark", height=320, margin=dict(l=0, r=0, t=20, b=0), legend=dict(orientation="h", y=1.1))
@@ -234,7 +229,6 @@ with t2:
         
         st.markdown('<div class="seccion-titulo">2. SOCIOGRAMA HISTÓRICO Y RECIENTE</div>', unsafe_allow_html=True)
         if not df_f.empty:
-            # Gráfico de relaciones Actor-Territorio
             df_s = df_f[df_f['actor'] != 'Desconocido'].groupby(['actor', 'ubicacion']).size().reset_index(name='Impactos')
             fig_soc = px.scatter(df_s, x='ubicacion', y='actor', size='Impactos', color='actor', template="plotly_dark")
             fig_soc.update_layout(height=320, margin=dict(l=0, r=0, t=20, b=0))
