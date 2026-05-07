@@ -30,7 +30,16 @@ st.markdown("""
 URL = "https://wffttolclywvofzakmfd.supabase.co"
 API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndmZnR0b2xjbHl3dm9memFrbWZkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc5MjMyOTksImV4cCI6MjA5MzQ5OTI5OX0.8vzHsEjPvZBf49VMCl1G8PtFYXLoxYSrzhbrYIBNEcU"
 
-# --- 3. MOTORES DE EXTRACCIÓN (BLINDADOS) ---
+# --- 3. FUNCIÓN DE SANEAMIENTO EXTREMO (ANTIBUG JSON) ---
+def sanitizar_texto(val):
+    if pd.isna(val) or val is None: return ""
+    texto = str(val)
+    # Destruimos barras invertidas, saltos de línea y tabulaciones que rompen JavaScript
+    texto = texto.replace('\\', '/').replace('"', "'").replace('\n', ' ').replace('\r', '').replace('\t', ' ')
+    # Mantenemos solo caracteres imprimibles limpios
+    return ''.join(c for c in texto if c.isprintable()).strip()
+
+# --- 4. MOTORES DE EXTRACCIÓN ---
 @st.cache_data(ttl=300)
 def get_osint_data():
     try:
@@ -40,7 +49,12 @@ def get_osint_data():
         if not df.empty:
             df['fecha_dt'] = pd.to_datetime(df['fecha'], errors='coerce').dt.tz_localize(None)
             df = df.dropna(subset=['fecha_dt']).sort_values('fecha_dt', ascending=False)
-            df['actor'] = df['actor'].fillna('Desconocido')
+            
+            # Saneamos los textos para el mapa
+            for col in ['actor', 'titular', 'resumen_ia', 'ubicacion']:
+                if col in df.columns:
+                    df[col] = df[col].apply(sanitizar_texto)
+            df['actor'] = df['actor'].replace("", "Desconocido")
         return df
     except Exception as e:
         st.error(f"Error Bóveda OSINT: {e}")
@@ -48,27 +62,26 @@ def get_osint_data():
 
 @st.cache_data
 def get_layers_data():
-    # 3.1 Extractor Excel CMPC con Filtro de Saneamiento
+    # 4.1 Extractor Excel CMPC con Filtro de Saneamiento Extremo
     try:
         fundos = pd.read_excel('FUNDOS_COMPLEJIDADyRIESGO_20250409.xlsx')
         fundos = fundos.dropna(subset=['F_LATITUD', 'F_LONGITUD'])
         
-        # Saneamiento de caracteres invisibles para evitar SyntaxError JSON en Plotly
         if 'NOM_FUNDO' in fundos.columns:
-            fundos['NOM_FUNDO'] = fundos['NOM_FUNDO'].astype(str).apply(lambda x: ''.join(c for c in x if c.isprintable()))
+            fundos['NOM_FUNDO'] = fundos['NOM_FUNDO'].apply(sanitizar_texto)
         if 'DSC_COMPLE' in fundos.columns:
-            fundos['DSC_COMPLE'] = fundos['DSC_COMPLE'].astype(str).apply(lambda x: ''.join(c for c in x if c.isprintable()))
+            fundos['DSC_COMPLE'] = fundos['DSC_COMPLE'].apply(sanitizar_texto)
     except Exception as e:
         st.error(f"Error cargando Activos CMPC (Excel): {e}")
         fundos = pd.DataFrame()
 
-    # 3.2 Extractor Quirúrgico KML Histórico
+    # 4.2 Extractor Quirúrgico KML Histórico
     kml_data = []
     try:
         with open('mapa2020-2025.kml', 'r', encoding='utf-8') as f:
             soup = BeautifulSoup(f, 'xml')
         for p in soup.find_all('Placemark'):
-            name = p.find('name').text if p.find('name') else 'Incidente'
+            name_raw = p.find('name').text if p.find('name') else 'Incidente'
             desc_tag = p.find('description')
             desc_text = desc_tag.text if desc_tag else ""
             
@@ -76,13 +89,16 @@ def get_layers_data():
             match_fecha = re.search(r'(\d{2}-\d{2}-\d{4}|\d{2}-\d{2}-\d{2})', desc_text)
             if match_fecha: fecha_hist = match_fecha.group(1)
             
-            desc_limpia = re.sub(r'<[^>]+>', ' ', desc_text).replace('descripción:', '').replace('tessellate:', '').strip()
-            desc_limpia = ''.join(c for c in desc_limpia if c.isprintable())
+            desc_limpia = re.sub(r'<[^>]+>', ' ', desc_text).replace('descripción:', '').replace('tessellate:', '')
+            
+            # Aplicamos el sanitizador a las variables del KML
+            name_limpio = sanitizar_texto(name_raw)
+            desc_sanitizada = sanitizar_texto(desc_limpia)[:150] + "..."
             
             coords = p.find('coordinates')
             if coords:
                 lon, lat, _ = coords.text.strip().split(',')
-                kml_data.append({'lat': float(lat), 'lon': float(lon), 'name': name, 'fecha': fecha_hist, 'desc': desc_limpia[:150] + "..."})
+                kml_data.append({'lat': float(lat), 'lon': float(lon), 'name': name_limpio, 'fecha': fecha_hist, 'desc': desc_sanitizada})
     except Exception as e:
         st.error(f"Error cargando KML Histórico: {e}")
 
@@ -91,7 +107,7 @@ def get_layers_data():
 df_osint = get_osint_data()
 df_fundos, df_kml = get_layers_data()
 
-# --- 4. PANEL DE CONTROL (SIDEBAR) ---
+# --- 5. PANEL DE CONTROL (SIDEBAR) ---
 st.sidebar.title("🛡️ COMANDO C5I")
 periodo = st.sidebar.selectbox("Filtro Temporal (OSINT)", ["7 días", "30 días", "90 días", "Todo el registro"])
 dias = {"7 días": 7, "30 días": 30, "90 días": 90, "Todo el registro": 3650}[periodo]
@@ -101,7 +117,7 @@ if not df_osint.empty:
 else:
     df_f = pd.DataFrame()
 
-# --- 5. CABECERA: TRENDING KEYWORDS ---
+# --- 6. CABECERA: TRENDING KEYWORDS ---
 st.markdown("### 🏷️ TRENDING KEYWORDS (BIGRAMAS TÁCTICOS)")
 if not df_f.empty:
     titulares_unidos = " ".join(df_f['palabra_clave'].dropna().tolist() + df_f['titular'].dropna().tolist()).lower()
@@ -117,7 +133,7 @@ if not df_f.empty:
     html_tags += "</div>"
     st.markdown(html_tags, unsafe_allow_html=True)
 
-# --- 6. TABS TÁCTICOS ---
+# --- 7. TABS TÁCTICOS ---
 t1, t2, t3 = st.tabs(["🎯 MAPA GEOINT & FEED", "📊 PROSPECTIVA & HISTÓRICO", "📝 INFORME GERENCIAL"])
 
 # ==========================================
