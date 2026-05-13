@@ -3,6 +3,7 @@ pandas
 supabase
 plotly
 networkx
+pyvis
 python-docx
 openpyxl
 beautifulsoup4
