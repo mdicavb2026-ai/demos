@@ -162,7 +162,7 @@ def cargar_inteligencia_masiva():
             
             df['nivel_alerta'] = df['alerta_semantica']
             
-            # Mandato inmutable de Criticidad para CMPC ante incidentes hostiles
+            # Mandato inmutable de Criticidad para CMPC ante incidentes hostiles directos
             criterios_cmpc = "cmpc|mininco|forestal mininco|fundo cmpc|predio cmpc|camión forestal|maquinaria forestal"
             mask_cmpc = (df['titular'].str.contains(criterios_cmpc, case=False, na=False) | df.get('resumen_ia', pd.Series()).str.contains(criterios_cmpc, case=False, na=False))
             mask_positivo = df['tipologia_oficial'] == 'Informativo / Positivo corporativo'
@@ -905,10 +905,6 @@ elif modo_analisis == "📄 Reportes Radar":
                     hdr_cells[2].text = 'Titular / Descripción Fáctica'
                     
                     for cell in hdr_cells:
-                        # Color de fondo de cabecera usando shading XML
-                        tcPr = cell._tc.get_or_add_tcPr()
-                        shd = tcPr.find(qn('w:shd')) if 'w:shd' in str(tcPr) else None
-                        # Para evitar fallos complejos de importación XML, aplicamos formato de fuente simple:
                         for paragraph in cell.paragraphs:
                             for run in paragraph.runs:
                                 run.font.bold = True
