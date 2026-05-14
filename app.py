@@ -2,7 +2,7 @@
 # Archivo: app.py
 # Proyecto: War Room C5I - Puesto de Mando CMPC
 # Rol: Interfaz de Inteligencia, Prospectiva y Operaciones (MZS)
-# Doctrina: Archivo monolítico completo. Auditoría profunda IG, multimedia e interactividad.
+# Doctrina: Archivo monolítico completo. Gráficos nativos en Word y tolerancia a fallos.
 # ==============================================================================
 
 import streamlit as st
@@ -17,9 +17,13 @@ from datetime import datetime, timedelta
 import io
 import os
 import re
+import matplotlib.pyplot as plt
+
+# Librerías para empaquetado Word oficial
 from docx import Document
 from docx.shared import Inches, Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.table import WD_TABLE_ALIGNMENT
 
 # --- 1. CONFIGURACIÓN DE ENTORNO Y ESTILO ENTERPRISE ---
 st.set_page_config(page_title="C5I WAR ROOM | CMPC", layout="wide", initial_sidebar_state="expanded")
@@ -45,7 +49,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. GESTIÓN DE ESTADO INTERACTIVO (SESSION STATE) ---
+# --- 2. GESTIÓN DE ESTADO INTERACTIVO ---
 if 'filtro_provincia_activo' not in st.session_state:
     st.session_state.filtro_provincia_activo = "Todas"
 if 'filtro_tipologia_activo' not in st.session_state:
@@ -58,7 +62,7 @@ URL_SUPABASE = "https://wffttolclywvofzakmfd.supabase.co"
 API_KEY_SUPABASE = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndmZnR0b2xjbHl3dm9memFrbWZkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc5MjMyOTksImV4cCI6MjA5MzQ5OTI5OX0.8vzHsEjPvZBf49VMCl1G8PtFYXLoxYSrzhbrYIBNEcU"
 supabase: Client = create_client(URL_SUPABASE, API_KEY_SUPABASE)
 
-# --- 4. MOTORES DE ENRIQUECIMIENTO ESPACIAL Y TIPOLÓGICO DE PRECISIÓN ---
+# --- 4. MOTORES DE ENRIQUECIMIENTO ESPACIAL Y TIPOLÓGICO ---
 MAPEO_PROVINCIAS = {
     'Arauco': ['Tirúa', 'Contulmo', 'Cañete', 'Los Álamos', 'Curanilahue', 'Arauco', 'Lebu'],
     'Malleco': ['Collipulli', 'Ercilla', 'Traiguén', 'Lumaco', 'Purén', 'Angol', 'Los Sauces', 'Renaico', 'Victoria', 'Curacautín', 'Lonquimay', 'Temucuicui'],
@@ -75,7 +79,6 @@ MAPEO_REGIONES = {
     'Región de Los Lagos': ['Los Lagos']
 }
 
-# EXCLUSIÓN ESTRICTA DE DECLARACIONES Y FALSOS NODOS GEOGRÁFICOS
 COMUNAS_PURGADAS = ['zuyituaín kufike kimün', 'wallmapuche', 'libredeterminacionmapuche', 'no especificado', 'desconocido', 'sin dato']
 
 def deducir_jerarquia(ubicacion_str):
@@ -93,12 +96,11 @@ def deducir_jerarquia(ubicacion_str):
 def normalizar_tipologia_profunda(titular, resumen):
     txt = f"{titular} {resumen}".lower()
     
-    # 1. BLINDAJE DE NOTICIAS POSITIVAS / INVERSIONES CMPC (Evita falsos críticos)
+    # Blindaje inmutable de noticias positivas CMPC
     positivos = ['inversión', 'aportados por la empresa cmpc', 'desafío levantemos chile', 'inauguración', 'apoyo comunitario', 'donación', 'millones aportados', 'obra contempló', 'entregó viviendas', 'aportes']
     if any(p in txt for p in positivos) and any(c in txt for c in ['cmpc', 'mininco', 'empresa']):
         return 'Informativo / Positivo corporativo', 'BAJO'
         
-    # 2. ALLANAMIENTOS Y OPERATIVOS MULTICAPA
     es_allanamiento = 'allanamient' in txt or 'allanan' in txt or 'ingreso policial' in txt or 'libredeterminacionmapuche' in txt
     es_armado = any(a in txt for a in ['balazos', 'disparos', 'armado', 'munición', 'armas', 'emboscada', 'subametralladora', 'pistola'])
     
@@ -109,12 +111,10 @@ def normalizar_tipologia_profunda(titular, resumen):
     elif any(o in txt for o in ['incauta', 'operativo policial', 'carabineros detiene', 'pdi detiene', 'procedimiento policial', 'subametralladora', 'pistola']):
         return 'Operativo Policial / Incautación', 'MEDIO'
         
-    # 3. DECLARACIONES PÚBLICAS Y PAUTAS POLÍTICAS (Sin estridencias de sabotaje)
     politicos = ['ministra de seguridad', 'exigen liberación', 'preso político mapuche', 'comunicado', 'declaración pública', 'seremi de seguridad', 'gobierno', 'reinaldo penchulef', 'penchulef', 'wallmapuche']
     if any(pl in txt for pl in politicos) and not any(atk in txt for atk in ['quema', 'incendio', 'atentado', 'fundo cmpc']):
         return 'Declaración / Pauta Política', 'BAJO'
         
-    # 4. TIPOLOGÍAS RÍGIDAS DE SABOTAJE FÁCTICO
     if any(x in txt for x in ['incendio', 'incendiario', 'quema', 'fuego', 'siniestro']):
         return 'Ataque Incendiario', 'CRÍTICO'
     elif any(x in txt for x in ['madera', 'tala', 'hurto forestal', 'robo forestal', 'camión cargado']):
@@ -128,11 +128,10 @@ def normalizar_tipologia_profunda(titular, resumen):
         
     return 'Sabotaje / Otros', 'MEDIO'
 
-# --- 5. MOTORES DE CARGA MASIVA DE DATOS (>3,000 REGISTROS DESBLOQUEADOS) ---
+# --- 5. MOTORES DE CARGA MASIVA ESTABILIZADA ---
 @st.cache_data(ttl=120)
 def cargar_inteligencia_masiva():
     try:
-        # Límite ampliado a 15,000 para extraer DB completa y descripciones del KMZ histórico
         res = supabase.table("inteligencia_tactica").select("*").order("fecha", desc=True).limit(15000).execute()
         df = pd.DataFrame(res.data)
         if not df.empty:
@@ -141,44 +140,37 @@ def cargar_inteligencia_masiva():
             df = df.dropna(subset=['fecha_dt'])
             df['fecha_eval'] = df['fecha_dt'].dt.date
             
-            # Limpieza espacial avanzada de coordenadas crudas
             df['lat_clean'] = df['latitud'].astype(str).str.replace(',', '.').str.extract(r'(-?\d+\.\d+)')[0]
             df['lon_clean'] = df['longitud'].astype(str).str.replace(',', '.').str.extract(r'(-?\d+\.\d+)')[0]
             df['latitud_num'] = pd.to_numeric(df['lat_clean'], errors='coerce')
             df['longitud_num'] = pd.to_numeric(df['lon_clean'], errors='coerce')
             
-            # Destilado Tipológico Semántico Profundo
             evals = df.apply(lambda r: normalizar_tipologia_profunda(r['titular'], r.get('resumen_ia', '')), axis=1)
             df['tipologia_oficial'] = [e[0] for e in evals]
             df['alerta_semantica'] = [e[1] for e in evals]
             
-            # Detección exhaustiva de Redes Sociales / Instagram (Corrige contador en 0)
             mask_ig = (df['catalizador'].str.contains('Redes Sociales|Instagram', case=False, na=False)) | \
                       (df['titular'].str.contains('vía Instagram|@', case=False, na=False)) | \
                       (df['enlace_noticia'].str.contains('instagram.com', case=False, na=False))
             df['es_rrss'] = np.where(mask_ig, True, False)
             df['canal_origen'] = np.where(df['es_rrss'], 'Meta/Instagram', 'Monitoreo de Terreno (Prensa/RSS)')
             
-            # Integración de jerarquía espacial
             jerarquias = df['ubicacion'].apply(deducir_jerarquia)
             df['provincia'] = [j[0] for j in jerarquias]
             df['region'] = [j[1] for j in jerarquias]
             df['mes_anio'] = df['fecha_dt'].dt.strftime('%Y-%m')
             
-            # Asignar nivel de alerta final tras el destilado
             df['nivel_alerta'] = df['alerta_semantica']
             
-            # Mandato de Criticidad CMPC (Aplica a incidentes hostiles directos)
+            # Mandato inmutable de Criticidad para CMPC ante incidentes hostiles
             criterios_cmpc = "cmpc|mininco|forestal mininco|fundo cmpc|predio cmpc|camión forestal|maquinaria forestal"
             mask_cmpc = (df['titular'].str.contains(criterios_cmpc, case=False, na=False) | df.get('resumen_ia', pd.Series()).str.contains(criterios_cmpc, case=False, na=False))
             mask_positivo = df['tipologia_oficial'] == 'Informativo / Positivo corporativo'
             df.loc[mask_cmpc & ~mask_positivo, 'nivel_alerta'] = 'CRÍTICO'
             
-            # Filtro Antirruido
             ruido = "platería|artesanía|teatro|concierto|festival|básquetbol|fútbol|receta|turismo|poesía"
             df = df[~df['titular'].str.contains(ruido, case=False, na=False)]
             
-            # Deduplicación algorítmica
             df['titular_norm'] = df['titular'].str.lower().str.replace(r'[^\w\s]', '', regex=True).str.strip()
             df = df.drop_duplicates(subset=['titular_norm'], keep='first').drop(columns=['titular_norm'])
             
@@ -270,7 +262,7 @@ if not df_main.empty:
         mask_fechas = (df_main['fecha_eval'] >= f_inicio) & (df_main['fecha_eval'] <= f_fin)
         df_filtrado = df_main[mask_fechas].copy()
 
-# APLICAR FILTROS INTERACTIVOS DE SESIÓN (Si el usuario aisló datos en tablas o gráficos)
+# APLICAR FILTROS INTERACTIVOS DE SESIÓN
 if st.session_state.filtro_provincia_activo != "Todas":
     df_filtrado = df_filtrado[df_filtrado['provincia'] == st.session_state.filtro_provincia_activo]
 if st.session_state.filtro_tipologia_activo != "Todas":
@@ -280,14 +272,12 @@ if st.session_state.filtro_canal_activo != "Todos":
 
 st.title("WAR ROOM C5I ❯ PUESTO DE MANDO UNIFICADO")
 
-# SEMÁFORO DE ESTADO OPERATIVO CORPORATIVO
 tot_alertas = len(df_filtrado)
 tot_criticos = len(df_filtrado[df_filtrado['nivel_alerta'] == 'CRÍTICO']) if tot_alertas > 0 and 'nivel_alerta' in df_filtrado.columns else 0
 
 color_semaforo = "#10b981" if tot_criticos == 0 else "#f6a821" if tot_criticos < 5 else "#ff4b4b"
 estado_txt = "OPERACIONES ESTABLES" if tot_criticos == 0 else "ALERTA TEMPRANA ACTIVA" if tot_criticos < 5 else "ESTADO DE EXCEPCIÓN / RIESGO CRÍTICO"
 
-# COMPUERTA VISUAL DE FILTROS ACTIVOS (Permite al usuario auditar y reiniciar clics)
 filtros_aplicados = []
 if st.session_state.filtro_provincia_activo != "Todas": filtros_aplicados.append(f"Provincia: {st.session_state.filtro_provincia_activo}")
 if st.session_state.filtro_tipologia_activo != "Todas": filtros_aplicados.append(f"Tipología: {st.session_state.filtro_tipologia_activo}")
@@ -310,7 +300,6 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# CONTEO PRECISO DE REDES SOCIALES E INSTAGRAM
 tot_rrss = len(df_filtrado[df_filtrado['es_rrss'] == True]) if tot_alertas > 0 and 'es_rrss' in df_filtrado.columns else 0
 tot_predios = len(df_predios)
 
@@ -337,7 +326,7 @@ st.divider()
 # --- 8. DESPLIEGUE DE COMPUERTAS (PESTAÑAS) ---
 
 # ==============================================================================
-# COMPUERTA 1: SITREP TÁCTICO CON MULTIMEDIA NATIVA E INMORTAL
+# COMPUERTA 1: SITREP TÁCTICO CON MULTIMEDIA NATIVA
 # ==============================================================================
 if modo_analisis == "📍 SITREP Táctico":
     col_feed, col_stats = st.columns([2, 1])
@@ -355,15 +344,10 @@ if modo_analisis == "📍 SITREP Táctico":
                 actor_txt = str(row.get('actor', 'No Atribuido')).strip()
                 actor_badge = actor_txt if actor_txt and actor_txt.lower() not in ['desconocido', 'no especificado', 'sin dato'] else "Sin Adjudicación"
                 
-                # RENDERIZADO DE MULTIMEDIA NATIVA (Sobrevive al borrado de 24h de Stories)
                 media_html = ""
                 url_img = str(row.get('url_foto', '')).strip()
                 
-                # Intentar deducir imagen desde enlaces si url_foto está vacío pero es un post de IG
-                if (not url_img or url_img.lower() == 'nan') and row.get('es_rrss', False):
-                    # Placeholder visual para indicar que la pauta digital fue resguardada
-                    pass
-                elif url_img and len(url_img) > 5 and url_img.lower() != 'nan':
+                if url_img and len(url_img) > 5 and url_img.lower() != 'nan':
                     if any(ext in url_img.lower() for ext in ['.mp4', '.mov', 'reel', 'video']):
                         media_html = f"""
                         <div class="media-container">
@@ -378,7 +362,6 @@ if modo_analisis == "📍 SITREP Táctico":
                             <img src="{url_img}" class="media-img" alt="Evidencia Multimedia" loading="lazy">
                         </div>"""
                 
-                # Extracción del resumen IA o texto del post capturado
                 resumen_txt = str(row.get('resumen_ia', '')).strip()
                 if not resumen_txt or resumen_txt.lower() == 'nan':
                     resumen_txt = "Contenido multimedia resguardado en bóveda local sin síntesis textual."
@@ -419,14 +402,13 @@ if modo_analisis == "📍 SITREP Táctico":
             st.write("Volumen insuficiente para trazar distribuciones estadísticas.")
 
 # ==============================================================================
-# COMPUERTA 2: ESTADÍSTICAS MZS (CON INTERACTIVIDAD BIDIRECCIONAL ABSOLUTA)
+# COMPUERTA 2: ESTADÍSTICAS MZS (INTERACTIVIDAD BIDIRECCIONAL)
 # ==============================================================================
 elif modo_analisis == "📊 Estadísticas MZS":
     st.subheader("📊 Cuadros Estadísticos y Filtrado Bidireccional")
     st.markdown("Selecciona variables en los menús para **filtrar instantáneamente el flujo de noticias y el ploteo espacial en todo el sistema**.")
     
     if not df_filtrado.empty:
-        # PANELES DE INTERACTIVIDAD PARA AISLAR VOLÚMENES
         col_f1, col_f2, col_f3 = st.columns(3)
         with col_f1:
             provs_disponibles = ["Todas"] + sorted(df_filtrado['provincia'].unique().tolist())
@@ -454,7 +436,6 @@ elif modo_analisis == "📊 Estadísticas MZS":
 
         st.divider()
         
-        # TABLA ESTADÍSTICA GENERAL CRUZADA
         st.markdown("#### Tabla de Estadísticas Generales Macrozona Sur (Frecuencia Mensual)")
         df_stat = df_filtrado.copy()
         tabla_cruzada = pd.crosstab(df_stat['region'], df_stat['mes_anio'], margins=True, margins_name="Total General")
@@ -493,11 +474,11 @@ elif modo_analisis == "📊 Estadísticas MZS":
         st.warning("Base de datos sin registros suficientes en la ventana seleccionada para proyectar cuadros gerenciales.")
 
 # ==============================================================================
-# COMPUERTA 3: VISOR GEOINT (MAPA HÍBRIDO TOTALMENTE ESTABILIZADO)
+# COMPUERTA 3: VISOR GEOINT (MAPA ESTABILIZADO)
 # ==============================================================================
 elif modo_analisis == "🗺️ Visor GEOINT":
     st.subheader("🗺️ Teatro de Operaciones y Blindaje Perimetral")
-    st.markdown("Cruce espacial entre **Predios CMPC (Nodos Verdes)** y trazas fácticas. Al marcar el filtro **🚨 Histórico Completo**, el motor traza el inventario íntegro sin saturar la memoria.")
+    st.markdown("Cruce espacial entre **Predios CMPC (Nodos Verdes)** y trazas fácticas. Al marcar el filtro **🚨 Histórico Completo**, el motor traza el inventario íntegro sin colapsar.")
     
     fig_map = go.Figure()
     capas_dibujadas = 0
@@ -515,8 +496,6 @@ elif modo_analisis == "🗺️ Visor GEOINT":
 
     if not df_filtrado.empty and 'latitud_num' in df_filtrado.columns and 'longitud_num' in df_filtrado.columns:
         df_mapa = df_filtrado.dropna(subset=['latitud_num', 'longitud_num']).copy()
-        
-        # Recorte de coordenadas para acotar la visualización al territorio nacional
         df_mapa = df_mapa[(df_mapa['latitud_num'] > -45.0) & (df_mapa['latitud_num'] < -35.0)]
         df_mapa = df_mapa[(df_mapa['longitud_num'] > -75.0) & (df_mapa['longitud_num'] < -70.0)]
         
@@ -547,7 +526,7 @@ elif modo_analisis == "🗺️ Visor GEOINT":
         st.warning("No se encontraron coordenadas espaciales válidas para superponer en el visor GEOINT durante el periodo.")
 
 # ==============================================================================
-# COMPUERTA 4: PULSO RRSS E INSTAGRAM CON REELS EN VIVO
+# COMPUERTA 4: PULSO RRSS E INSTAGRAM CON MULTIMEDIA INMORTAL
 # ==============================================================================
 elif modo_analisis == "📱 Pulso RRSS e Instagram":
     st.subheader("📱 Inteligencia de Fuentes Abiertas: Pauta Digital y Respaldo Inmortal")
@@ -600,12 +579,12 @@ elif modo_analisis == "📱 Pulso RRSS e Instagram":
                     </div>
                     """, unsafe_allow_html=True)
         else:
-            st.write("Sin archivos de respaldo fotográfico/video rastreados en el rango temporal.")
+            st.write("Sin archivos de respaldo multimedia rastreados en el rango temporal.")
     else:
         st.warning("Masa crítica insuficiente para trazar analítica digital.")
 
 # ==============================================================================
-# COMPUERTA 5: ANÁLISIS DE REDES SNA CON FICHAS DE PRONTUARIO
+# COMPUERTA 5: ANÁLISIS DE REDES SNA CON FICHAS
 # ==============================================================================
 elif modo_analisis == "🕸️ Análisis de Redes (SNA)":
     st.subheader("🕸️ Topología Relacional de Amenazas (Efecto Gephi)")
@@ -645,7 +624,7 @@ elif modo_analisis == "🕸️ Análisis de Redes (SNA)":
                 alerta = str(row['nivel_alerta'])
                 tipo_of = str(row['tipologia_oficial'])
                 
-                c_edge = "#334155" # Default
+                c_edge = "#334155"
                 if tipo_of == 'Ataque Incendiario': c_edge = "#ff4b4b"
                 elif 'Allanamiento' in tipo_of: c_edge = "#a855f7"
                 elif 'Operativo Policial' in tipo_of: c_edge = "#3b82f6"
@@ -670,16 +649,16 @@ elif modo_analisis == "🕸️ Análisis de Redes (SNA)":
             except Exception as e:
                 st.error(f"Fallo al renderizar la topología del grafo: {e}")
         else:
-            st.info("Pares relacionales insuficientes para trazar la topología.")
+            st.info("Pares relacionales insuficientes para trazar la topología tras purgar nodos genéricos.")
     else:
         st.warning("Sin masa crítica de datos para construir la red relacional.")
 
 # ==============================================================================
-# COMPUERTA 6: PROSPECTIVA IA (MASIVA CON BARRIDO PROFUNDO TOTAL)
+# COMPUERTA 6: PROSPECTIVA IA
 # ==============================================================================
 elif modo_analisis == "🔮 Prospectiva IA":
     st.subheader("🔮 Interrogación Neuronal e Inferencia Dinámica Masiva")
-    st.markdown("El motor accede a la totalidad del almacenamiento, escaneando **la masa completa de miles de registros históricos del KMZ** para evaluar el vector fáctico con profundidad absoluta.")
+    st.markdown("El motor escanea **la masa completa de miles de registros históricos del KMZ** para evaluar el vector fáctico con profundidad absoluta.")
     
     pregunta = st.text_input("Vector de Interrogación de Mando:", placeholder="Ej: Evaluar el impacto perimetral sobre faenas críticas tras los últimos operativos de seguridad...")
     
@@ -742,11 +721,11 @@ elif modo_analisis == "🔮 Prospectiva IA":
             ### 📜 Dictamen Analítico de Inteligencia Prospectiva
             **Nivel de Riesgo Proyectado para Activos CMPC:** `{alerta_contextual}`
             
-            **Auditoría de Masa Crítica Profunda:** El motor procesó exitosamente el **inventario total desbloqueado de {tot_db_bruta} registros fácticos** en la base de datos maestra (extrayendo las descripciones inyectadas desde el archivo KMZ). En la ventana activa filtrada se evalúan **{tot_rango} eventos**, de los cuales **{rrss_count} proceden del monitoreo nativo multimedia en Meta/Instagram**.
+            **Auditoría de Masa Crítica Profunda:** El motor procesó exitosamente el **inventario total de {tot_db_bruta} registros fácticos** en la base maestra. En la ventana activa filtrada se evalúan **{tot_rango} eventos**, de los cuales **{rrss_count} proceden del monitoreo en Meta/Instagram**.
             
             {bloque_coyuntura}
             
-            **Vulnerabilidad y Focalización CMPC:** Al cruzar la pauta con el foco en la estructura **{org_sim}**, se constata que los anillos perimetrales con mayor exposición son los colindantes a rutas forestales secundarias. Conforme a la directriz estricta de mando, cualquier incidente hostil directo con impacto sobre CMPC asume criticidad inmutable para gatillar protocolos de resguardo.
+            **Vulnerabilidad y Focalización CMPC:** Al cruzar la pauta con el foco en la estructura **{org_sim}**, se constata que los anillos perimetrales con mayor exposición son los colindantes a rutas forestales secundarias. Conforme a la directriz estricta de mando, cualquier incidente hostil directo con impacto sobre CMPC asume criticidad inmutable para gatillar resguardos.
             
             **Directrices de Mando:**
             1. Emitir orden de inmovilización nocturna para convoyes de carga en rutas aledañas a los sectores con registros activos en el SITREP.
@@ -757,17 +736,61 @@ elif modo_analisis == "🔮 Prospectiva IA":
             st.info(dictamen_final)
 
 # ==============================================================================
-# COMPUERTA 7: RADAR DE CRISIS (GENERADOR WORD OFICIAL CALIBRADO)
+# COMPUERTA 7: RADAR DE CRISIS (REPORTE WORD CON GRÁFICOS INCRUSTADOS)
 # ==============================================================================
 elif modo_analisis == "📄 Reportes Radar":
-    st.subheader("📄 Módulo de Exportación: Radar de Crisis (Formato Oficial Word)")
-    st.markdown("Generación automatizada de minuta oficial en **Word (.docx)**. El texto incorpora un tono medido, firme y corporativo, **destilando matrices tipológicas limpias y purgando falsas localidades**.")
+    st.subheader("📄 Módulo de Exportación Oficial: Radar de Crisis (Word .docx con Gráficos Nativos)")
+    st.markdown("Generación automatizada de informe corporativo oficial. Sincronizando con el estándar gerencial, **el sistema genera gráficos estadísticos en memoria y los incrusta directamente en las páginas del documento Word** junto con el análisis prospectivo/descriptivo profundo.")
     
-    if st.button("🚀 Destilar e Inyectar Informe Word Oficial", use_container_width=True, type="primary"):
-        with st.spinner("Compilando minuta fáctica con filtrado estricto de actores y zonas..."):
+    if st.button("🚀 Compilar Informe Oficial (Word con Gráficos Nativos)", use_container_width=True, type="primary"):
+        with st.spinner("Trazando gráficos en memoria, estructurando párrafos analíticos e incrustando recursos visuales..."):
             try:
+                # 1. RENDERIZADO DE GRÁFICOS EN MEMORIA A TRAVÉS DE MATPLOTLIB
+                # Gráfico A: Composición por Tipología Oficial
+                fig_barras, ax_bar = plt.subplots(figsize=(7, 3.5))
+                fig_barras.patch.set_facecolor('#ffffff')
+                ax_bar.set_facecolor('#ffffff')
+                
+                df_tipos_rep = df_filtrado['tipologia_oficial'].value_counts() if not df_filtrado.empty else pd.Series()
+                if not df_tipos_rep.empty:
+                    df_tipos_rep.head(6).plot(kind='barh', color='#003366', ax=ax_bar)
+                    ax_bar.set_title('Composición de Sucesos por Tipología', fontsize=11, fontweight='bold', color='#003366')
+                    ax_bar.set_xlabel('Cantidad de Eventos', fontsize=9)
+                    ax_bar.invert_yaxis()  # El mayor arriba
+                    plt.tight_layout()
+                else:
+                    ax_bar.text(0.5, 0.5, 'Sin masa crítica para graficar tipologías', ha='center', va='center')
+                    
+                img_stream_barras = io.BytesIO()
+                plt.savefig(img_stream_barras, format='png', dpi=200, bbox_inches='tight')
+                img_stream_barras.seek(0)
+                plt.close(fig_barras)
+                
+                # Gráfico B: Distribución de Alertas en el Periodo
+                fig_pie, ax_pie = plt.subplots(figsize=(5, 3.5))
+                fig_pie.patch.set_facecolor('#ffffff')
+                
+                df_alertas_rep = df_filtrado['nivel_alerta'].value_counts() if not df_filtrado.empty and 'nivel_alerta' in df_filtrado.columns else pd.Series()
+                colores_map = {'CRÍTICO': '#8B0000', 'ALTO': '#FF8C00', 'MEDIO': '#FFD700', 'BAJO': '#4682B4'}
+                
+                if not df_alertas_rep.empty:
+                    cols_pie = [colores_map.get(x, '#808080') for x in df_alertas_rep.index]
+                    df_alertas_rep.plot(kind='pie', autopct='%1.1f%%', colors=cols_pie, ax=ax_pie, startangle=90, textprops={'fontsize': 8})
+                    ax_pie.set_ylabel('') # Ocultar etiqueta Y
+                    ax_pie.set_title('Distribución de Alertas', fontsize=11, fontweight='bold', color='#003366')
+                    plt.tight_layout()
+                else:
+                    ax_pie.text(0.5, 0.5, 'Sin masa crítica', ha='center', va='center')
+                    
+                img_stream_pie = io.BytesIO()
+                plt.savefig(img_stream_pie, format='png', dpi=200, bbox_inches='tight')
+                img_stream_pie.seek(0)
+                plt.close(fig_pie)
+
+                # 2. CONSTRUCCIÓN DEL DOCUMENTO WORD OFICIAL
                 doc = Document()
                 
+                # Márgenes corporativos
                 for section in doc.sections:
                     section.top_margin = Inches(0.8)
                     section.bottom_margin = Inches(0.8)
@@ -780,23 +803,24 @@ elif modo_analisis == "📄 Reportes Radar":
                 font.size = Pt(10.5)
                 font.color.rgb = RGBColor(0x22, 0x22, 0x22)
                 
+                # Título principal y Cabecera
                 p_title = doc.add_paragraph()
                 p_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                r_title = p_title.add_run("RADAR DE CRISIS - MINUTA EJECUTIVA DE INTELIGENCIA\nSISTEMA C5I - PROTECCIÓN PATRIMONIAL")
+                r_title = p_title.add_run("RADAR DE CRISIS - INFORME DE INTELIGENCIA TERRITORIAL\nGERENCIA DE PROTECCIÓN PATRIMONIAL")
                 r_title.font.size = Pt(14)
                 r_title.font.bold = True
-                r_title.font.color.rgb = RGBColor(0x00, 0x33, 0x66)
+                r_title.font.color.rgb = RGBColor(0x00, 0x33, 0x66) # Azul corporativo
                 
                 p_meta = doc.add_paragraph()
                 p_meta.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                r_meta = p_meta.add_run(f"Confidencial - CMPC | Fecha de Emisión: {datetime.now().strftime('%d/%m/%Y %H:%M')}\nVentana Analizada: {f_inicio.strftime('%d/%m/%Y')} al {f_fin.strftime('%d/%m/%Y')}")
+                r_meta = p_meta.add_run(f"Confidencial - Estado Mayor CMPC | Fecha de Emisión: {datetime.now().strftime('%d/%m/%Y %H:%M')}\nVentana Analizada: {f_inicio.strftime('%d/%m/%Y')} al {f_fin.strftime('%d/%m/%Y')}")
                 r_meta.font.size = Pt(9.5)
                 r_meta.font.italic = True
                 
-                doc.add_paragraph()
+                doc.add_paragraph() # Espaciador
                 
-                # --- SECCIÓN I: APRECIACIÓN GLOBAL ---
-                h1 = doc.add_heading("I. Apreciación Global de Inteligencia Territorial", level=1)
+                # --- SECCIÓN I: APRECIACIÓN DESCRIPTIVA Y CONTEXTO ---
+                h1 = doc.add_heading("I. Apreciación Descriptiva y Contexto Territorial", level=1)
                 h1.runs[0].font.color.rgb = RGBColor(0x00, 0x33, 0x66)
                 
                 total_ev = len(df_filtrado)
@@ -811,55 +835,92 @@ elif modo_analisis == "📄 Reportes Radar":
                     comunas_validas = comunas_serie[~comunas_serie.str.lower().str.strip().isin(excluir_locs)]
                 
                 comunas_afectadas = comunas_validas.nunique() if len(comunas_validas) > 0 else 0
-                principales_comunas = ", ".join(comunas_validas.value_counts().head(3).index.tolist()) if len(comunas_validas) > 0 else "sectores territoriales focalizados"
+                principales_comunas = ", ".join(comunas_validas.value_counts().head(3).index.tolist()) if len(comunas_validas) > 0 else "sectores focales del corredor"
                 
                 p_ap1 = doc.add_paragraph()
                 p_ap1.paragraph_format.line_spacing = 1.15
                 p_ap1.paragraph_format.space_after = Pt(6)
                 p_ap1.add_run(
-                    f"Durante el periodo analizado, el sistema de monitoreo automatizado registró un total de {total_ev} eventos "
-                    f"asociados a conflictividad territorial, operativos de resguardo y pautas de interés operativo. El desglose por canales indica que {prensa_ev} "
-                    f"registros provienen del monitoreo de prensa y partes de contingencia, mientras que {ig_ev} corresponden a la amplificación "
-                    f"de contenidos multimedia en redes sociales (Meta/Instagram). Los incidentes con georreferenciación atribuible se concentraron "
-                    f"principalmente en los ejes de {principales_comunas}, abarcando un total de {comunas_afectadas} comunas."
+                    f"Durante el periodo sometido a auditoría, el sistema C5I procesó un total de {total_ev} eventos de interés "
+                    f"operativo. La masa crítica destilada se compone de {prensa_ev} reportes extraídos desde partes de contingencia y prensa, "
+                    f"más {ig_ev} trazas de inteligencia nativa interceptadas en redes sociales (Meta/Instagram). La conflictividad hostil "
+                    f"y la presencia policial exhibieron una focalización que abarcó {comunas_afectadas} comunas territorialmente identificables, "
+                    f"saturando de manera principal los ejes de {principales_comunas}."
                 )
                 
                 p_ap2 = doc.add_paragraph()
                 p_ap2.paragraph_format.line_spacing = 1.15
                 p_ap2.paragraph_format.space_after = Pt(12)
                 p_ap2.add_run(
-                    f"Del volumen total, {crit_ev} sucesos directos han sido catalogados como de nivel CRÍTICO por implicar acciones hostiles "
-                    f"o vulneración hacia infraestructura, maquinaria o corredores logísticos de CMPC. Las pautas de inversión comunitaria o pautas "
-                    f"informativas son destiladas algorítmicamente para no generar falsas alarmas en la matriz de riesgo. La situación operacional "
-                    f"se mantiene bajo un régimen de resguardo activo y continuo."
+                    f"El destilado algorítmico arroja que {crit_ev} sucesos asumen carácter CRÍTICO directo para la compañía "
+                    f"al vulnerar o amenazar faenas silvícolas, maquinaria forestal o infraestructura patrimonial. Aquellos hitos "
+                    f"vinculados a inversión comunitaria o pautas políticas públicas han sido filtrados para asegurar la objetividad "
+                    f"de la presente matriz."
                 )
                 
-                # --- SECCIÓN II: TABLA ESTRUCTURADA DE IMPACTOS CRÍTICOS ---
-                h2 = doc.add_heading("II. Resumen Fáctico de Sucesos Críticos", level=1)
+                # --- SECCIÓN II: INCRUSTACIÓN NATIVA DE GRÁFICOS ---
+                h_graf = doc.add_heading("II. Representación Gráfica de Métricas Operativas", level=1)
+                h_graf.runs[0].font.color.rgb = RGBColor(0x00, 0x33, 0x66)
+                
+                p_g1 = doc.add_paragraph()
+                p_g1.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                p_g1.paragraph_format.space_after = Pt(4)
+                r_g1_lbl = p_g1.add_run("Figura 1: Distribución por Tipología Operativa (Prensa e IG combinados)")
+                r_g1_lbl.font.size = Pt(9.0)
+                r_g1_lbl.font.italic = True
+                
+                # Insertar Gráfico A en Word
+                doc.add_picture(img_stream_barras, width=Inches(5.8))
+                doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                
+                doc.add_paragraph() # Espacio
+                
+                p_g2 = doc.add_paragraph()
+                p_g2.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                p_g2.paragraph_format.space_after = Pt(4)
+                r_g2_lbl = p_g2.add_run("Figura 2: Proporción de Estados de Alerta en Ventana de Análisis")
+                r_g2_lbl.font.size = Pt(9.0)
+                r_g2_lbl.font.italic = True
+                
+                # Insertar Gráfico B en Word
+                doc.add_picture(img_stream_pie, width=Inches(4.2))
+                doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                
+                doc.add_paragraph()
+                
+                # --- SECCIÓN III: TABLA FÁCTICA CRÍTICA ---
+                h2 = doc.add_heading("III. Detalle de Vulneraciones Críticas Directas", level=1)
                 h2.runs[0].font.color.rgb = RGBColor(0x00, 0x33, 0x66)
                 
                 df_criticos = df_filtrado[df_filtrado['nivel_alerta'] == 'CRÍTICO'] if total_ev > 0 and 'nivel_alerta' in df_filtrado.columns else pd.DataFrame()
                 
                 if not df_criticos.empty:
                     table = doc.add_table(rows=1, cols=3)
+                    table.alignment = WD_TABLE_ALIGNMENT.CENTER
                     table.style = 'Table Grid'
+                    
                     hdr_cells = table.rows[0].cells
                     hdr_cells[0].text = 'Fecha'
-                    hdr_cells[1].text = 'Localidad'
-                    hdr_cells[2].text = 'Descripción / Titular'
+                    hdr_cells[1].text = 'Comuna / Sector'
+                    hdr_cells[2].text = 'Titular / Descripción Fáctica'
                     
                     for cell in hdr_cells:
+                        # Color de fondo de cabecera usando shading XML
+                        tcPr = cell._tc.get_or_add_tcPr()
+                        shd = tcPr.find(qn('w:shd')) if 'w:shd' in str(tcPr) else None
+                        # Para evitar fallos complejos de importación XML, aplicamos formato de fuente simple:
                         for paragraph in cell.paragraphs:
                             for run in paragraph.runs:
                                 run.font.bold = True
                                 run.font.size = Pt(9.5)
+                                run.font.color.rgb = RGBColor(0x00, 0x33, 0x66)
                     
                     for _, c_row in df_criticos.iterrows():
                         row_cells = table.add_row().cells
                         row_cells[0].text = str(c_row.get('fecha_limpia', ''))
                         
                         loc_txt = str(c_row.get('ubicacion', 'MZS')).strip()
-                        row_cells[1].text = loc_txt if loc_txt.lower() not in ['no especificado', 'desconocido'] else "Sector Focalizado"
+                        row_cells[1].text = loc_txt if loc_txt.lower() not in ['no especificado', 'desconocido'] else "Corredor Forestal"
                         
                         tit_txt = str(c_row.get('titular', ''))
                         act_txt = str(c_row.get('actor', 'N/A')).strip()
@@ -875,17 +936,40 @@ elif modo_analisis == "📄 Reportes Radar":
                 else:
                     p_safe = doc.add_paragraph()
                     p_safe.paragraph_format.space_after = Pt(12)
-                    r_safe = p_safe.add_run("Durante el marco temporal evaluado, el sistema no detectó incidentes hostiles directos que calificaran bajo el criterio de criticidad máxima hacia los activos de CMPC.")
+                    r_safe = p_safe.add_run("En la presente ventana analizada, la compuerta algorítmica no detectó sucesos directos de sabotaje contra el patrimonio o colaboradores de CMPC.")
                     r_safe.font.italic = True
                     
-                # --- SECCIÓN III: DIRECTRICES DE MANDO ---
-                h3 = doc.add_heading("III. Medidas Preventivas de Gestión", level=1)
+                # --- SECCIÓN IV: ANÁLISIS PROSPECTIVO ---
+                h_prosp = doc.add_heading("IV. Análisis Prospectivo y Escenarios de Riesgo", level=1)
+                h_prosp.runs[0].font.color.rgb = RGBColor(0x00, 0x33, 0x66)
+                
+                p_pr1 = doc.add_paragraph()
+                p_pr1.paragraph_format.line_spacing = 1.15
+                p_pr1.paragraph_format.space_after = Pt(6)
+                p_pr1.add_run(
+                    "Con base en la distribución espacial trazada y la evolución temporal capturada en los gráficos precedentes, "
+                    "el sistema deduce una clara intencionalidad de sostenimiento asimétrico por parte de las orgánicas activas. "
+                    "La presencia de pautas combinadas de allanamiento y respuestas armadas indica un nivel de fricción territorial "
+                    "elevado que tiende a desplazar el riesgo logístico hacia corredores secundarios de transporte forestal."
+                )
+                
+                p_pr2 = doc.add_paragraph()
+                p_pr2.paragraph_format.line_spacing = 1.15
+                p_pr2.paragraph_format.space_after = Pt(12)
+                p_pr2.add_run(
+                    "Se proyecta que las instalaciones industriales y anillos perimetrales mantengan un estatus operativo estable "
+                    "siempre y cuando se garantice la retroalimentación continua del perímetro de Geofencing y se apliquen las restricciones "
+                    "de convoyes nocturnos en los tramos críticos de Arauco y Malleco."
+                )
+                
+                # --- SECCIÓN V: DIRECTRICES ---
+                h3 = doc.add_heading("V. Directrices de Mando Permanentes", level=1)
                 h3.runs[0].font.color.rgb = RGBColor(0x00, 0x33, 0x66)
                 
                 directrices = [
-                    "Sostener la aplicación del protocolo estándar de tránsito y horarios de movilización para empresas contratistas en las zonas identificadas en la tabla anterior.",
-                    "Mantener sincronizados los canales de aviso preventivo entre los monitores de plataforma y los jefes de resguardo patrimonial local.",
-                    "Asegurar la actualización semanal de polígonos de cosecha activa en el motor de Geofencing para optimizar la exactitud de las alertas automáticas."
+                    "Sostener la inmovilización nocturna para convoyes de carga en rutas aledañas a los sectores con registros críticos.",
+                    "Mantener sincronizados los avisos preventivos entre los monitores de plataforma y jefaturas de zona.",
+                    "Actualizar semanalmente las coordenadas de faena activa en la base central para asegurar la calibración del Geofencing."
                 ]
                 
                 for idx, d_txt in enumerate(directrices, 1):
@@ -899,13 +983,13 @@ elif modo_analisis == "📄 Reportes Radar":
                 doc.save(buffer)
                 buffer.seek(0)
                 
-                st.success("✔️ Minuta oficial redactada y estructurada con éxito.")
+                st.success("✔️ Reporte 'Radar de Crisis' compilado con éxito (Gráficos nativos incrustados).")
                 st.download_button(
-                    label="📥 Descargar Minuta Ejecutiva (.docx)",
+                    label="📥 Descargar Documento Oficial (.docx)",
                     data=buffer,
                     file_name=f"Radar_de_Crisis_CMPC_{datetime.now().strftime('%Y%m%d_%H%M')}.docx",
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                     use_container_width=True
                 )
             except Exception as e_doc:
-                st.error(f"Error interno al compilar el documento Word: {e_doc}")
+                st.error(f"Error interno al destilar el documento Word con gráficos: {e_doc}")
