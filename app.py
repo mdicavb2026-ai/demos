@@ -2,7 +2,7 @@
 # Archivo: app.py
 # Proyecto: War Room C5I - Puesto de Mando CMPC
 # Rol: Interfaz de Inteligencia, Prospectiva y Operaciones (MZS)
-# Doctrina: Archivo monolítico completo. Interactividad, multimedia y precisión semántica.
+# Doctrina: Archivo monolítico completo. Auditoría profunda IG, multimedia e interactividad.
 # ==============================================================================
 
 import streamlit as st
@@ -24,7 +24,6 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 # --- 1. CONFIGURACIÓN DE ENTORNO Y ESTILO ENTERPRISE ---
 st.set_page_config(page_title="C5I WAR ROOM | CMPC", layout="wide", initial_sidebar_state="expanded")
 
-# Inyección de CSS para diseño UI/UX de Puesto de Mando
 st.markdown("""
 <style>
     .stApp { background-color: #05080f; color: #e0e6ed; }
@@ -39,8 +38,8 @@ st.markdown("""
     .semaforo-luz { width: 14px; height: 14px; border-radius: 50%; display: inline-block; box-shadow: 0 0 8px currentColor; }
     .semaforo-label { font-size: 0.85rem; font-weight: bold; color: #cbd5e1; margin-right: 15px; }
     .metric-expl { font-size: 0.7rem; color: #64748b; margin-top: -10px; margin-bottom: 10px; line-height: 1.1; }
-    .media-container { max-height: 250px; overflow: hidden; border-radius: 6px; margin-top: 8px; border: 1px solid #334155; background-color: #000; text-align: center; }
-    .media-img { width: 100%; height: auto; object-fit: cover; }
+    .media-container { max-height: 280px; overflow: hidden; border-radius: 6px; margin-top: 10px; border: 1px solid #334155; background-color: #000; text-align: center; }
+    .media-img { width: 100%; height: auto; object-fit: cover; max-height: 280px; }
     h1, h2, h3, h4 { color: #ffffff; letter-spacing: -0.5px; }
     div.block-container { padding-top: 1.5rem; padding-bottom: 1.5rem; }
 </style>
@@ -51,8 +50,8 @@ if 'filtro_provincia_activo' not in st.session_state:
     st.session_state.filtro_provincia_activo = "Todas"
 if 'filtro_tipologia_activo' not in st.session_state:
     st.session_state.filtro_tipologia_activo = "Todas"
-if 'nodo_seleccionado_resumen' not in st.session_state:
-    st.session_state.nodo_seleccionado_resumen = None
+if 'filtro_canal_activo' not in st.session_state:
+    st.session_state.filtro_canal_activo = "Todos"
 
 # --- 3. CONEXIÓN A LA BÓVEDA SUPABASE ---
 URL_SUPABASE = "https://wffttolclywvofzakmfd.supabase.co"
@@ -76,8 +75,8 @@ MAPEO_REGIONES = {
     'Región de Los Lagos': ['Los Lagos']
 }
 
-# EXCLUSIÓN DE FALSAS COMUNAS (Declaraciones textuales erróneas)
-COMUNAS_PURGADAS = ['zuyituaín kufike kimün', 'wallmapuche', 'libredeterminacionmapuche', 'no especificado', 'desconocido']
+# EXCLUSIÓN ESTRICTA DE DECLARACIONES Y FALSOS NODOS GEOGRÁFICOS
+COMUNAS_PURGADAS = ['zuyituaín kufike kimün', 'wallmapuche', 'libredeterminacionmapuche', 'no especificado', 'desconocido', 'sin dato']
 
 def deducir_jerarquia(ubicacion_str):
     u_norm = str(ubicacion_str).strip().lower()
@@ -94,25 +93,28 @@ def deducir_jerarquia(ubicacion_str):
 def normalizar_tipologia_profunda(titular, resumen):
     txt = f"{titular} {resumen}".lower()
     
-    # 1. COMPROBACIÓN DE INVERSIONES Y NOTICIAS POSITIVAS CMPC (Evita falsos críticos)
-    positivos = ['inversión', 'aportados por la empresa cmpc', 'desafío levantemos chile', 'inauguración', 'apoyo comunitario', 'donación', 'millones aportados', 'obra contempló']
-    if any(p in txt for p in positivos) and ('cmpc' in txt or 'mininco' in txt):
+    # 1. BLINDAJE DE NOTICIAS POSITIVAS / INVERSIONES CMPC (Evita falsos críticos)
+    positivos = ['inversión', 'aportados por la empresa cmpc', 'desafío levantemos chile', 'inauguración', 'apoyo comunitario', 'donación', 'millones aportados', 'obra contempló', 'entregó viviendas', 'aportes']
+    if any(p in txt for p in positivos) and any(c in txt for c in ['cmpc', 'mininco', 'empresa']):
         return 'Informativo / Positivo corporativo', 'BAJO'
         
-    # 2. OPERATIVOS POLICIALES Y ALLANAMIENTOS
-    if 'allanamient' in txt or 'allanan' in txt:
-        if 'armas' in txt or 'balazos' in txt or 'disparos' in txt:
-            return 'Allanamiento / Incautación Armada', 'ALTO'
+    # 2. ALLANAMIENTOS Y OPERATIVOS MULTICAPA
+    es_allanamiento = 'allanamient' in txt or 'allanan' in txt or 'ingreso policial' in txt or 'libredeterminacionmapuche' in txt
+    es_armado = any(a in txt for a in ['balazos', 'disparos', 'armado', 'munición', 'armas', 'emboscada', 'subametralladora', 'pistola'])
+    
+    if es_allanamiento and es_armado:
+        return 'Allanamiento / Ataque Armado', 'ALTO'
+    elif es_allanamiento:
         return 'Allanamiento', 'MEDIO'
-    elif any(o in txt for o in ['incauta', 'operativo policial', 'carabineros detiene', 'pdi detiene', 'subametralladora', 'pistola']):
+    elif any(o in txt for o in ['incauta', 'operativo policial', 'carabineros detiene', 'pdi detiene', 'procedimiento policial', 'subametralladora', 'pistola']):
         return 'Operativo Policial / Incautación', 'MEDIO'
         
-    # 3. DECLARACIONES Y PAUTAS POLÍTICAS / PÚBLICAS
-    politicos = ['ministra de seguridad', 'exigen liberación', 'preso político mapuche', 'comunicado', 'declaración pública', 'seremi de seguridad', 'gobierno']
-    if any(pl in txt for pl in politicos) and not any(atk in txt for atk in ['quema', 'incendio', 'atentado', 'balazos contra']):
+    # 3. DECLARACIONES PÚBLICAS Y PAUTAS POLÍTICAS (Sin estridencias de sabotaje)
+    politicos = ['ministra de seguridad', 'exigen liberación', 'preso político mapuche', 'comunicado', 'declaración pública', 'seremi de seguridad', 'gobierno', 'reinaldo penchulef', 'penchulef', 'wallmapuche']
+    if any(pl in txt for pl in politicos) and not any(atk in txt for atk in ['quema', 'incendio', 'atentado', 'fundo cmpc']):
         return 'Declaración / Pauta Política', 'BAJO'
         
-    # 4. TIPOLOGÍAS RÍGIDAS DE SABOTAJE
+    # 4. TIPOLOGÍAS RÍGIDAS DE SABOTAJE FÁCTICO
     if any(x in txt for x in ['incendio', 'incendiario', 'quema', 'fuego', 'siniestro']):
         return 'Ataque Incendiario', 'CRÍTICO'
     elif any(x in txt for x in ['madera', 'tala', 'hurto forestal', 'robo forestal', 'camión cargado']):
@@ -121,16 +123,16 @@ def normalizar_tipologia_profunda(titular, resumen):
         return 'Usurpación', 'ALTO'
     elif any(x in txt for x in ['ruta', 'corte', 'barricada', 'bloqueo', 'despeje', 'árboles caídos']):
         return 'Corte de Ruta', 'MEDIO'
-    elif any(x in txt for x in ['armado', 'disparos', 'balazos', 'munición', 'emboscada', 'armas']):
+    elif es_armado:
         return 'Ataque Armado', 'CRÍTICO'
         
     return 'Sabotaje / Otros', 'MEDIO'
 
-# --- 5. MOTORES DE CARGA MASIVA DE DATOS (>3,000 REGISTROS BLINDADOS) ---
+# --- 5. MOTORES DE CARGA MASIVA DE DATOS (>3,000 REGISTROS DESBLOQUEADOS) ---
 @st.cache_data(ttl=120)
 def cargar_inteligencia_masiva():
     try:
-        # Límite expandido masivamente para jalar DB completa incluyendo cache KMZ
+        # Límite ampliado a 15,000 para extraer DB completa y descripciones del KMZ histórico
         res = supabase.table("inteligencia_tactica").select("*").order("fecha", desc=True).limit(15000).execute()
         df = pd.DataFrame(res.data)
         if not df.empty:
@@ -139,29 +141,36 @@ def cargar_inteligencia_masiva():
             df = df.dropna(subset=['fecha_dt'])
             df['fecha_eval'] = df['fecha_dt'].dt.date
             
-            # Limpieza espacial avanzada de comas y strings vacíos
+            # Limpieza espacial avanzada de coordenadas crudas
             df['lat_clean'] = df['latitud'].astype(str).str.replace(',', '.').str.extract(r'(-?\d+\.\d+)')[0]
             df['lon_clean'] = df['longitud'].astype(str).str.replace(',', '.').str.extract(r'(-?\d+\.\d+)')[0]
             df['latitud_num'] = pd.to_numeric(df['lat_clean'], errors='coerce')
             df['longitud_num'] = pd.to_numeric(df['lon_clean'], errors='coerce')
             
-            # Destilado Tipológico y Semántico Profundo
-            evals = df.apply(lambda r: normalizar_tipologia_profunda(r['titular'], r['resumen_ia']), axis=1)
+            # Destilado Tipológico Semántico Profundo
+            evals = df.apply(lambda r: normalizar_tipologia_profunda(r['titular'], r.get('resumen_ia', '')), axis=1)
             df['tipologia_oficial'] = [e[0] for e in evals]
             df['alerta_semantica'] = [e[1] for e in evals]
             
-            # Integración de jerarquía territorial
+            # Detección exhaustiva de Redes Sociales / Instagram (Corrige contador en 0)
+            mask_ig = (df['catalizador'].str.contains('Redes Sociales|Instagram', case=False, na=False)) | \
+                      (df['titular'].str.contains('vía Instagram|@', case=False, na=False)) | \
+                      (df['enlace_noticia'].str.contains('instagram.com', case=False, na=False))
+            df['es_rrss'] = np.where(mask_ig, True, False)
+            df['canal_origen'] = np.where(df['es_rrss'], 'Meta/Instagram', 'Monitoreo de Terreno (Prensa/RSS)')
+            
+            # Integración de jerarquía espacial
             jerarquias = df['ubicacion'].apply(deducir_jerarquia)
             df['provincia'] = [j[0] for j in jerarquias]
             df['region'] = [j[1] for j in jerarquias]
             df['mes_anio'] = df['fecha_dt'].dt.strftime('%Y-%m')
             
-            # Aplicar Alerta Definitiva considerando la reingeniería semántica
+            # Asignar nivel de alerta final tras el destilado
             df['nivel_alerta'] = df['alerta_semantica']
             
-            # Forzar criticidad si atenta directamente contra CMPC (excepto noticias de inversión/donación)
+            # Mandato de Criticidad CMPC (Aplica a incidentes hostiles directos)
             criterios_cmpc = "cmpc|mininco|forestal mininco|fundo cmpc|predio cmpc|camión forestal|maquinaria forestal"
-            mask_cmpc = (df['titular'].str.contains(criterios_cmpc, case=False, na=False) | df['resumen_ia'].str.contains(criterios_cmpc, case=False, na=False))
+            mask_cmpc = (df['titular'].str.contains(criterios_cmpc, case=False, na=False) | df.get('resumen_ia', pd.Series()).str.contains(criterios_cmpc, case=False, na=False))
             mask_positivo = df['tipologia_oficial'] == 'Informativo / Positivo corporativo'
             df.loc[mask_cmpc & ~mask_positivo, 'nivel_alerta'] = 'CRÍTICO'
             
@@ -261,11 +270,13 @@ if not df_main.empty:
         mask_fechas = (df_main['fecha_eval'] >= f_inicio) & (df_main['fecha_eval'] <= f_fin)
         df_filtrado = df_main[mask_fechas].copy()
 
-# APLICAR FILTROS INTERACTIVOS DE SESIÓN (Si el usuario hizo clic en botones de gráficos)
+# APLICAR FILTROS INTERACTIVOS DE SESIÓN (Si el usuario aisló datos en tablas o gráficos)
 if st.session_state.filtro_provincia_activo != "Todas":
     df_filtrado = df_filtrado[df_filtrado['provincia'] == st.session_state.filtro_provincia_activo]
 if st.session_state.filtro_tipologia_activo != "Todas":
     df_filtrado = df_filtrado[df_filtrado['tipologia_oficial'] == st.session_state.filtro_tipologia_activo]
+if st.session_state.filtro_canal_activo != "Todos":
+    df_filtrado = df_filtrado[df_filtrado['canal_origen'] == st.session_state.filtro_canal_activo]
 
 st.title("WAR ROOM C5I ❯ PUESTO DE MANDO UNIFICADO")
 
@@ -276,12 +287,18 @@ tot_criticos = len(df_filtrado[df_filtrado['nivel_alerta'] == 'CRÍTICO']) if to
 color_semaforo = "#10b981" if tot_criticos == 0 else "#f6a821" if tot_criticos < 5 else "#ff4b4b"
 estado_txt = "OPERACIONES ESTABLES" if tot_criticos == 0 else "ALERTA TEMPRANA ACTIVA" if tot_criticos < 5 else "ESTADO DE EXCEPCIÓN / RIESGO CRÍTICO"
 
-# Botón de reinicio de filtros de interactividad
-btn_reset_html = ""
-if st.session_state.filtro_provincia_activo != "Todas" or st.session_state.filtro_tipologia_activo != "Todas":
-    if st.button("🔄 Restablecer Filtros Interactivos", type="secondary"):
+# COMPUERTA VISUAL DE FILTROS ACTIVOS (Permite al usuario auditar y reiniciar clics)
+filtros_aplicados = []
+if st.session_state.filtro_provincia_activo != "Todas": filtros_aplicados.append(f"Provincia: {st.session_state.filtro_provincia_activo}")
+if st.session_state.filtro_tipologia_activo != "Todas": filtros_aplicados.append(f"Tipología: {st.session_state.filtro_tipologia_activo}")
+if st.session_state.filtro_canal_activo != "Todos": filtros_aplicados.append(f"Canal: {st.session_state.filtro_canal_activo}")
+
+if filtros_aplicados:
+    st.info(f"📌 **Filtros Interactivos Bloqueados en Sesión:** {', '.join(filtros_aplicados)}")
+    if st.button("🔄 Restablecer Todos los Filtros Interactivos", type="primary"):
         st.session_state.filtro_provincia_activo = "Todas"
         st.session_state.filtro_tipologia_activo = "Todas"
+        st.session_state.filtro_canal_activo = "Todos"
         st.rerun()
 
 st.markdown(f"""
@@ -293,7 +310,8 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-tot_rrss = len(df_filtrado[df_filtrado['catalizador'].str.contains('Redes Sociales|Instagram', case=False, na=False)]) if tot_alertas > 0 and 'catalizador' in df_filtrado.columns else 0
+# CONTEO PRECISO DE REDES SOCIALES E INSTAGRAM
+tot_rrss = len(df_filtrado[df_filtrado['es_rrss'] == True]) if tot_alertas > 0 and 'es_rrss' in df_filtrado.columns else 0
 tot_predios = len(df_predios)
 
 col_m1, col_m2, col_m3, col_m4 = st.columns(4)
@@ -308,7 +326,7 @@ with col_m2:
 
 with col_m3:
     st.metric("INGESTIÓN REDES SOCIALES", tot_rrss, delta="Meta/Instagram")
-    st.markdown('<div class="metric-expl">Capturas multimedia con respaldo local inalterable ante borrado en origen.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="metric-expl">Capturas de Instagram/RRSS con respaldo local auditado semánticamente.</div>', unsafe_allow_html=True)
 
 with col_m4:
     st.metric("ANILLOS PERIMETRALES", tot_predios, delta="GEOFENCING ACTIVO")
@@ -319,7 +337,7 @@ st.divider()
 # --- 8. DESPLIEGUE DE COMPUERTAS (PESTAÑAS) ---
 
 # ==============================================================================
-# COMPUERTA 1: SITREP TÁCTICO CON MULTIMEDIA NATIVA
+# COMPUERTA 1: SITREP TÁCTICO CON MULTIMEDIA NATIVA E INMORTAL
 # ==============================================================================
 if modo_analisis == "📍 SITREP Táctico":
     col_feed, col_stats = st.columns([2, 1])
@@ -327,7 +345,7 @@ if modo_analisis == "📍 SITREP Táctico":
     with col_feed:
         st.subheader("📋 Flujo de Detecciones Fácticas y Custodia Visual")
         if not df_filtrado.empty:
-            for _, row in df_filtrado.head(30).iterrows():
+            for _, row in df_filtrado.head(35).iterrows():
                 alerta = str(row.get('nivel_alerta', 'MEDIO')).upper()
                 borde = "#ff4b4b" if alerta == 'CRÍTICO' else "#f6a821" if alerta == 'ALTO' else "#eab308" if alerta == 'MEDIO' else "#38bdf8"
                 enlace = row.get('enlace_noticia', '')
@@ -337,24 +355,33 @@ if modo_analisis == "📍 SITREP Táctico":
                 actor_txt = str(row.get('actor', 'No Atribuido')).strip()
                 actor_badge = actor_txt if actor_txt and actor_txt.lower() not in ['desconocido', 'no especificado', 'sin dato'] else "Sin Adjudicación"
                 
-                # RENDERIZADO DE MULTIMEDIA NATIVA (Fotos y Videos en carpeta local/URL)
+                # RENDERIZADO DE MULTIMEDIA NATIVA (Sobrevive al borrado de 24h de Stories)
                 media_html = ""
                 url_img = str(row.get('url_foto', '')).strip()
-                if url_img and len(url_img) > 5 and url_img.lower() != 'nan':
-                    # Si es video mp4 o reel
+                
+                # Intentar deducir imagen desde enlaces si url_foto está vacío pero es un post de IG
+                if (not url_img or url_img.lower() == 'nan') and row.get('es_rrss', False):
+                    # Placeholder visual para indicar que la pauta digital fue resguardada
+                    pass
+                elif url_img and len(url_img) > 5 and url_img.lower() != 'nan':
                     if any(ext in url_img.lower() for ext in ['.mp4', '.mov', 'reel', 'video']):
                         media_html = f"""
                         <div class="media-container">
                             <video class="media-img" controls muted preload="metadata">
                                 <source src="{url_img}" type="video/mp4">
-                                Tu navegador no soporta el elemento de video.
+                                Tu navegador no soporta video HTML5.
                             </video>
                         </div>"""
-                    else: # Es fotografía capturada de pauta/historia
+                    else:
                         media_html = f"""
                         <div class="media-container">
-                            <img src="{url_img}" class="media-img" alt="Evidencia Operacional" loading="lazy">
+                            <img src="{url_img}" class="media-img" alt="Evidencia Multimedia" loading="lazy">
                         </div>"""
+                
+                # Extracción del resumen IA o texto del post capturado
+                resumen_txt = str(row.get('resumen_ia', '')).strip()
+                if not resumen_txt or resumen_txt.lower() == 'nan':
+                    resumen_txt = "Contenido multimedia resguardado en bóveda local sin síntesis textual."
                 
                 st.markdown(f"""
                 <div class="card-alerta" style="border-left: 5px solid {borde};">
@@ -363,9 +390,9 @@ if modo_analisis == "📍 SITREP Táctico":
                         <span class="badge-org">{actor_badge}</span>
                     </div>
                     <h4 style="margin-top: 8px; margin-bottom: 4px; color: #f8fafc;">{row.get('titular', 'Sin Titular')}</h4>
-                    <p style="font-size: 0.9rem; color: #cbd5e1; line-height: 1.4; margin-bottom: 8px;">{row.get('resumen_ia', 'Sin síntesis disponible.')}</p>
+                    <p style="font-size: 0.9rem; color: #cbd5e1; line-height: 1.4; margin-bottom: 8px;">{resumen_txt}</p>
                     {media_html}
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px;">
                         <span style="font-size: 0.75rem; color: {borde}; font-weight: bold;">{alerta} ❯ {row.get('tipologia_oficial','Otros')}</span>
                         {enlace_render}
                     </div>
@@ -392,18 +419,18 @@ if modo_analisis == "📍 SITREP Táctico":
             st.write("Volumen insuficiente para trazar distribuciones estadísticas.")
 
 # ==============================================================================
-# COMPUERTA 2: ESTADÍSTICAS MZS (CON INTERACTIVIDAD BIDIRECCIONAL)
+# COMPUERTA 2: ESTADÍSTICAS MZS (CON INTERACTIVIDAD BIDIRECCIONAL ABSOLUTA)
 # ==============================================================================
 elif modo_analisis == "📊 Estadísticas MZS":
-    st.subheader("📊 Cuadros Estadísticos y Evolución Interactiva")
-    st.markdown("Al hacer clic en los selectores rápidos, **el Dashboard filtra automáticamente todas las vistas en base a tu selección**.")
+    st.subheader("📊 Cuadros Estadísticos y Filtrado Bidireccional")
+    st.markdown("Selecciona variables en los menús para **filtrar instantáneamente el flujo de noticias y el ploteo espacial en todo el sistema**.")
     
     if not df_filtrado.empty:
-        # SELECTOR RÁPIDO INTERACTIVO PARA FILTRAR POR PROVINCIA O TIPOLOGÍA
-        col_f1, col_f2 = st.columns(2)
+        # PANELES DE INTERACTIVIDAD PARA AISLAR VOLÚMENES
+        col_f1, col_f2, col_f3 = st.columns(3)
         with col_f1:
             provs_disponibles = ["Todas"] + sorted(df_filtrado['provincia'].unique().tolist())
-            sel_prov = st.selectbox("🎯 Aislar Provincia Crítica (Aplica a todo el sistema):", provs_disponibles, 
+            sel_prov = st.selectbox("🎯 Aislar Provincia Crítica:", provs_disponibles, 
                                     index=provs_disponibles.index(st.session_state.filtro_provincia_activo) if st.session_state.filtro_provincia_activo in provs_disponibles else 0)
             if sel_prov != st.session_state.filtro_provincia_activo:
                 st.session_state.filtro_provincia_activo = sel_prov
@@ -415,6 +442,14 @@ elif modo_analisis == "📊 Estadísticas MZS":
                                     index=tipos_disponibles.index(st.session_state.filtro_tipologia_activo) if st.session_state.filtro_tipologia_activo in tipos_disponibles else 0)
             if sel_tipo != st.session_state.filtro_tipologia_activo:
                 st.session_state.filtro_tipologia_activo = sel_tipo
+                st.rerun()
+                
+        with col_f3:
+            canales_disponibles = ["Todos", "Meta/Instagram", "Monitoreo de Terreno (Prensa/RSS)"]
+            sel_canal = st.selectbox("📱 Aislar Canal de Ingestión:", canales_disponibles,
+                                     index=canales_disponibles.index(st.session_state.filtro_canal_activo) if st.session_state.filtro_canal_activo in canales_disponibles else 0)
+            if sel_canal != st.session_state.filtro_canal_activo:
+                st.session_state.filtro_canal_activo = sel_canal
                 st.rerun()
 
         st.divider()
@@ -438,7 +473,7 @@ elif modo_analisis == "📊 Estadísticas MZS":
                                 'Usurpación': '#10b981',
                                 'Corte de Ruta': '#38bdf8',
                                 'Ataque Armado': '#ec4899',
-                                'Allanamiento / Incautación Armada': '#8b5cf6',
+                                'Allanamiento / Ataque Armado': '#dc2626',
                                 'Allanamiento': '#a855f7',
                                 'Operativo Policial / Incautación': '#c084fc',
                                 'Declaración / Pauta Política': '#3b82f6',
@@ -458,11 +493,11 @@ elif modo_analisis == "📊 Estadísticas MZS":
         st.warning("Base de datos sin registros suficientes en la ventana seleccionada para proyectar cuadros gerenciales.")
 
 # ==============================================================================
-# COMPUERTA 3: VISOR GEOINT (MAPA HÍBRIDO SIN CAÍDAS)
+# COMPUERTA 3: VISOR GEOINT (MAPA HÍBRIDO TOTALMENTE ESTABILIZADO)
 # ==============================================================================
 elif modo_analisis == "🗺️ Visor GEOINT":
     st.subheader("🗺️ Teatro de Operaciones y Blindaje Perimetral")
-    st.markdown("Cruce espacial entre **Predios CMPC (Nodos Verdes)** y trazas fácticas. El ploteo masivo está estabilizado para cargar sin problemas los miles de hits del registro histórico.")
+    st.markdown("Cruce espacial entre **Predios CMPC (Nodos Verdes)** y trazas fácticas. Al marcar el filtro **🚨 Histórico Completo**, el motor traza el inventario íntegro sin saturar la memoria.")
     
     fig_map = go.Figure()
     capas_dibujadas = 0
@@ -481,7 +516,7 @@ elif modo_analisis == "🗺️ Visor GEOINT":
     if not df_filtrado.empty and 'latitud_num' in df_filtrado.columns and 'longitud_num' in df_filtrado.columns:
         df_mapa = df_filtrado.dropna(subset=['latitud_num', 'longitud_num']).copy()
         
-        # Enfoque estricto en el cono sur para evitar distorsiones de coordenadas oceánicas
+        # Recorte de coordenadas para acotar la visualización al territorio nacional
         df_mapa = df_mapa[(df_mapa['latitud_num'] > -45.0) & (df_mapa['latitud_num'] < -35.0)]
         df_mapa = df_mapa[(df_mapa['longitud_num'] > -75.0) & (df_mapa['longitud_num'] < -70.0)]
         
@@ -512,27 +547,26 @@ elif modo_analisis == "🗺️ Visor GEOINT":
         st.warning("No se encontraron coordenadas espaciales válidas para superponer en el visor GEOINT durante el periodo.")
 
 # ==============================================================================
-# COMPUERTA 4: PULSO RRSS E INSTAGRAM CON CUSTODIA NATIVA
+# COMPUERTA 4: PULSO RRSS E INSTAGRAM CON REELS EN VIVO
 # ==============================================================================
 elif modo_analisis == "📱 Pulso RRSS e Instagram":
-    st.subheader("📱 Inteligencia de Fuentes Abiertas: Tracción Digital y Custodia Multimedia")
-    st.markdown("Monitoreo de publicaciones y **respaldo local inalterable de Historias/Reels** que desaparecen de los servidores de origen.")
+    st.subheader("📱 Inteligencia de Fuentes Abiertas: Pauta Digital y Respaldo Inmortal")
+    st.markdown("Auditoría directa sobre el comportamiento de pauta en **Instagram** con proyección nativa de archivos locales.")
     
     if not df_filtrado.empty:
         df_rrss = df_filtrado.copy()
-        df_rrss['canal'] = np.where(df_rrss['catalizador'].str.contains('Redes Sociales|Instagram', case=False, na=False), 'Meta/Instagram', 'Monitoreo de Terreno (Prensa/RSS)')
         
         col_g1, col_g2 = st.columns(2)
         with col_g1:
             st.markdown("#### Emisiones Digitales vs Prensa")
-            fig_canal = px.histogram(df_rrss, x='fecha_limpia', color='canal', barmode='group',
+            fig_canal = px.histogram(df_rrss, x='fecha_limpia', color='canal_origen', barmode='group',
                                      color_discrete_map={'Meta/Instagram':'#ec4899', 'Monitoreo de Terreno (Prensa/RSS)':'#38bdf8'})
             fig_canal.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color="white", yaxis_title="Registros", xaxis_title="Fecha")
             st.plotly_chart(fig_canal, use_container_width=True)
             
         with col_g2:
-            st.markdown("#### Entidades y Perfiles Digitales Activos")
-            df_ig = df_rrss[df_rrss['canal'] == 'Meta/Instagram'].copy()
+            st.markdown("#### Cuentas y Entidades Digitales de Mayor Tracción")
+            df_ig = df_rrss[df_rrss['canal_origen'] == 'Meta/Instagram'].copy()
             if not df_ig.empty:
                 df_ig['perfil'] = df_ig['titular'].str.extract(r'@([a-zA-Z0-9_.]+)', expand=False).fillna(df_ig['actor'])
                 df_ig['perfil'] = df_ig['perfil'].replace('', 'Cuenta Objetivo')
@@ -550,7 +584,6 @@ elif modo_analisis == "📱 Pulso RRSS e Instagram":
             cols = st.columns(4)
             for idx, row in df_media.iterrows():
                 with cols[idx % 4]:
-                    # RENDERIZAR MULTIMEDIA NATIVAMENTE
                     m_html = ""
                     url_f = str(row.get('url_foto', '')).strip()
                     if any(ext in url_f.lower() for ext in ['.mp4', '.mov', 'reel']):
@@ -562,7 +595,7 @@ elif modo_analisis == "📱 Pulso RRSS e Instagram":
                     <div style="background-color: #0d121d; padding: 12px; border-radius: 8px; border: 1px solid #334155; margin-bottom: 10px;">
                         {m_html}
                         <b style="font-size:0.8rem; display:block; margin-top:6px;" title="{row.get('titular','')}">{str(row.get('titular',''))[:45]}...</b>
-                        <span style="font-size:0.7rem; color:#94a3b8;">Canal: {row.get('canal','N/A')}</span><br>
+                        <span style="font-size:0.7rem; color:#94a3b8;">Canal: {row.get('canal_origen','N/A')}</span><br>
                         <a href="{row.get('enlace_noticia','')}" target="_blank" style="font-size:0.75rem; color:#38bdf8; font-weight:bold;">Ver Origen / Respaldo</a>
                     </div>
                     """, unsafe_allow_html=True)
@@ -572,20 +605,19 @@ elif modo_analisis == "📱 Pulso RRSS e Instagram":
         st.warning("Masa crítica insuficiente para trazar analítica digital.")
 
 # ==============================================================================
-# COMPUERTA 5: ANÁLISIS DE REDES SNA CON RESÚMENES AL CLIC
+# COMPUERTA 5: ANÁLISIS DE REDES SNA CON FICHAS DE PRONTUARIO
 # ==============================================================================
 elif modo_analisis == "🕸️ Análisis de Redes (SNA)":
     st.subheader("🕸️ Topología Relacional de Amenazas (Efecto Gephi)")
-    st.markdown("Aristas codificadas semánticamente por color (**Rojo** = Incendio, **Azul** = Operativo Policial, **Verde** = Usurpación). Puedes seleccionar una orgánica en el menú inferior para desplegar su **Ficha Analítica de Prontuario**.")
+    st.markdown("Aristas codificadas semánticamente por color (**Rojo** = Incendio, **Morado** = Allanamiento, **Azul** = Operativo). Selecciona una orgánica en el menú inferior para desplegar su **Ficha Analítica de Prontuario**.")
     
     if not df_filtrado.empty:
         df_net = df_filtrado[["actor", "ubicacion", "tipologia_oficial", "nivel_alerta", "titular"]].dropna().copy()
-        terminos_excluidos = ['desconocido', 'no atribuido', 'sin dato', 'no especificado', '', 'mzs', 'macrozona sur']
+        terminos_excluidos = ['desconocido', 'no atribuido', 'sin dato', 'no especificado', '', 'mzs', 'macrozona sur'] + COMUNAS_PURGADAS
         df_net = df_net[~df_net['actor'].str.lower().str.strip().isin(terminos_excluidos)]
         df_net = df_net[~df_net['ubicacion'].str.lower().str.strip().isin(terminos_excluidos)]
         
         if len(df_net) > 0:
-            # INTEGRACIÓN SOLICITADA: Menú de selección para abrir la tarjeta de resumen de la orgánica
             organicas_top = sorted(df_net['actor'].unique().tolist())
             sel_org_resumen = st.selectbox("🔍 Seleccionar Orgánica Principal para Inspección de Ficha de Prontuario:", ["Ninguna"] + organicas_top)
             
@@ -613,10 +645,10 @@ elif modo_analisis == "🕸️ Análisis de Redes (SNA)":
                 alerta = str(row['nivel_alerta'])
                 tipo_of = str(row['tipologia_oficial'])
                 
-                # COLORIMETRÍA DIFERENCIADA POR TIPOLOGÍA PARA LAS ARISTAS
                 c_edge = "#334155" # Default
                 if tipo_of == 'Ataque Incendiario': c_edge = "#ff4b4b"
-                elif 'Operativo Policial' in tipo_of or 'Allanamiento' in tipo_of: c_edge = "#3b82f6"
+                elif 'Allanamiento' in tipo_of: c_edge = "#a855f7"
+                elif 'Operativo Policial' in tipo_of: c_edge = "#3b82f6"
                 elif tipo_of == 'Robo de Madera': c_edge = "#f6a821"
                 elif tipo_of == 'Usurpación': c_edge = "#10b981"
                 
@@ -643,7 +675,7 @@ elif modo_analisis == "🕸️ Análisis de Redes (SNA)":
         st.warning("Sin masa crítica de datos para construir la red relacional.")
 
 # ==============================================================================
-# COMPUERTA 6: PROSPECTIVA IA (MASIVA CON >3,000 HITS DE BARRIDO)
+# COMPUERTA 6: PROSPECTIVA IA (MASIVA CON BARRIDO PROFUNDO TOTAL)
 # ==============================================================================
 elif modo_analisis == "🔮 Prospectiva IA":
     st.subheader("🔮 Interrogación Neuronal e Inferencia Dinámica Masiva")
@@ -667,10 +699,9 @@ elif modo_analisis == "🔮 Prospectiva IA":
     
     if st.button("⚡ Ejecutar Inferencia de Estado Mayor", type="primary"):
         with st.spinner("Desbloqueando inventario profundo, iterando descripciones del KMZ y calculando tensores de riesgo..."):
-            # LECTURA DE LA BASE MASIVA DESBLOQUEADA (>3,000 registros reales en memoria)
             tot_rango = len(df_filtrado)
-            tot_db_bruta = len(df_main) # Masa crítica total en Supabase
-            rrss_count = len(df_filtrado[df_filtrado['catalizador'].str.contains('Redes Sociales|Instagram', case=False, na=False)]) if tot_rango > 0 and 'catalizador' in df_filtrado.columns else 0
+            tot_db_bruta = len(df_main) 
+            rrss_count = len(df_filtrado[df_filtrado['es_rrss'] == True]) if tot_rango > 0 and 'es_rrss' in df_filtrado.columns else 0
             
             menciones_reales = []
             if tot_rango > 0:
@@ -711,11 +742,11 @@ elif modo_analisis == "🔮 Prospectiva IA":
             ### 📜 Dictamen Analítico de Inteligencia Prospectiva
             **Nivel de Riesgo Proyectado para Activos CMPC:** `{alerta_contextual}`
             
-            **Auditoría de Masa Crítica Profunda:** El motor procesó exitosamente el **inventario total desbloqueado de {tot_db_bruta} registros fácticos** en la base de datos maestra (extrayendo las descripciones breves inyectadas desde el archivo KMZ). En la ventana activa filtrada se evalúan **{tot_rango} eventos**, de los cuales **{rrss_count} proceden del monitoreo nativo multimedia en Meta/Instagram**.
+            **Auditoría de Masa Crítica Profunda:** El motor procesó exitosamente el **inventario total desbloqueado de {tot_db_bruta} registros fácticos** en la base de datos maestra (extrayendo las descripciones inyectadas desde el archivo KMZ). En la ventana activa filtrada se evalúan **{tot_rango} eventos**, de los cuales **{rrss_count} proceden del monitoreo nativo multimedia en Meta/Instagram**.
             
             {bloque_coyuntura}
             
-            **Vulnerabilidad y Focalización CMPC:** Al cruzar la pauta con el foco en la estructura **{org_sim}**, se constata que los anillos perimetrales con mayor exposición son los colindantes a rutas forestales secundarias. Conforme a la directriz estricta de mando, cualquier incidente de sabotaje con impacto o proximidad sobre CMPC asume criticidad inmutable para gatillar protocolos de resguardo.
+            **Vulnerabilidad y Focalización CMPC:** Al cruzar la pauta con el foco en la estructura **{org_sim}**, se constata que los anillos perimetrales con mayor exposición son los colindantes a rutas forestales secundarias. Conforme a la directriz estricta de mando, cualquier incidente hostil directo con impacto sobre CMPC asume criticidad inmutable para gatillar protocolos de resguardo.
             
             **Directrices de Mando:**
             1. Emitir orden de inmovilización nocturna para convoyes de carga en rutas aledañas a los sectores con registros activos en el SITREP.
@@ -770,7 +801,7 @@ elif modo_analisis == "📄 Reportes Radar":
                 
                 total_ev = len(df_filtrado)
                 crit_ev = len(df_filtrado[df_filtrado['nivel_alerta'] == 'CRÍTICO']) if total_ev > 0 and 'nivel_alerta' in df_filtrado.columns else 0
-                ig_ev = len(df_filtrado[df_filtrado['catalizador'].str.contains('Redes Sociales|Instagram', case=False, na=False)]) if total_ev > 0 and 'catalizador' in df_filtrado.columns else 0
+                ig_ev = len(df_filtrado[df_filtrado['es_rrss'] == True]) if total_ev > 0 and 'es_rrss' in df_filtrado.columns else 0
                 prensa_ev = total_ev - ig_ev
                 
                 comunas_validas = []
@@ -797,7 +828,7 @@ elif modo_analisis == "📄 Reportes Radar":
                 p_ap2.paragraph_format.line_spacing = 1.15
                 p_ap2.paragraph_format.space_after = Pt(12)
                 p_ap2.add_run(
-                    f"Del volumen total, {crit_ev} sucesos directos han sido catalogados como de nivel CRÍTICO por implicar acciones de sabotaje "
+                    f"Del volumen total, {crit_ev} sucesos directos han sido catalogados como de nivel CRÍTICO por implicar acciones hostiles "
                     f"o vulneración hacia infraestructura, maquinaria o corredores logísticos de CMPC. Las pautas de inversión comunitaria o pautas "
                     f"informativas son destiladas algorítmicamente para no generar falsas alarmas en la matriz de riesgo. La situación operacional "
                     f"se mantiene bajo un régimen de resguardo activo y continuo."
