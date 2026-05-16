@@ -18,6 +18,32 @@ import io
 import os
 import re
 import matplotlib.pyplot as plt
+import base64
+
+def inyectar_evidencia_b64(ruta_local, url_web):
+    r_local = str(ruta_local).strip() if ruta_local else ""
+    u_web = str(url_web).strip() if url_web else ""
+    
+    if r_local and r_local.lower() not in ['nan', 'none', 'no especificado'] and os.path.exists(r_local):
+        try:
+            es_video = any(ext in r_local.lower() for ext in ['.mp4', '.mov'])
+            with open(r_local, "rb") as f:
+                b64_data = base64.b64encode(f.read()).decode()
+            
+            if es_video:
+                return f"data:video/mp4;base64,{b64_data}", True
+            else:
+                ext = "png" if r_local.lower().endswith(".png") else "jpeg"
+                return f"data:image/{ext};base64,{b64_data}", False
+        except Exception:
+            pass
+            
+    if u_web and len(u_web) > 5 and u_web.lower() != 'nan':
+        es_video = any(ext in u_web.lower() for ext in ['.mp4', '.mov', 'reel', 'video'])
+        return u_web, es_video
+        
+    return "", False
+
 
 # Librerías para empaquetado Word oficial
 from docx import Document
@@ -360,43 +386,33 @@ if modo_analisis == "📍 SITREP Táctico":
                 actor_txt = str(row.get('actor', 'No Atribuido')).strip()
                 actor_badge = actor_txt if actor_txt and actor_txt.lower() not in ['desconocido', 'no especificado', 'sin dato'] else "Sin Adjudicación"
                 
+                src_media, es_vid = inyectar_evidencia_b64(row.get('ruta_evidencia_local', ''), row.get('url_foto', ''))
                 media_html = ""
-                url_img = str(row.get('url_foto', '')).strip()
                 
-                if url_img and len(url_img) > 5 and url_img.lower() != 'nan':
-                    if any(ext in url_img.lower() for ext in ['.mp4', '.mov', 'reel', 'video']):
-                        media_html = f"""
-                        <div class="media-container">
-                            <video class="media-img" controls muted preload="metadata">
-                                <source src="{url_img}" type="video/mp4">
-                                Tu navegador no soporta video HTML5.
-                            </video>
-                        </div>"""
+                if src_media:
+                    if es_vid:
+                        media_html = f'<div class="media-container"><video class="media-img" controls muted preload="metadata"><source src="{src_media}" type="video/mp4">Tu navegador no soporta video HTML5.</video></div>'
                     else:
-                        media_html = f"""
-                        <div class="media-container">
-                            <img src="{url_img}" class="media-img" alt="Evidencia Multimedia" loading="lazy">
-                        </div>"""
+                        media_html = f'<div class="media-container"><img src="{src_media}" class="media-img" alt="Evidencia Multimedia" loading="lazy"></div>'
                 
                 resumen_txt = str(row.get('resumen_ia', '')).strip()
                 if not resumen_txt or resumen_txt.lower() == 'nan':
                     resumen_txt = "Contenido multimedia resguardado en bóveda local sin síntesis textual."
                 
-                st.markdown(f"""
-                <div class="card-alerta" style="border-left: 5px solid {borde};">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span style="font-size: 0.8rem; color: #94a3b8;">📅 {row.get('fecha_limpia', '')} | 📍 <b>{row.get('ubicacion', 'MZS')}</b> ({row.get('provincia','Arauco')})</span>
-                        <span class="badge-org">{actor_badge}</span>
-                    </div>
-                    <h4 style="margin-top: 8px; margin-bottom: 4px; color: #f8fafc;">{row.get('titular', 'Sin Titular')}</h4>
-                    <p style="font-size: 0.9rem; color: #cbd5e1; line-height: 1.4; margin-bottom: 8px;">{resumen_txt}</p>
-                    {media_html}
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px;">
-                        <span style="font-size: 0.75rem; color: {borde}; font-weight: bold;">{alerta} ❯ {row.get('tipologia_oficial','Otros')}</span>
-                        {enlace_render}
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
+                html_card = f'''<div class="card-alerta" style="border-left: 5px solid {borde};">
+<div style="display: flex; justify-content: space-between; align-items: center;">
+<span style="font-size: 0.8rem; color: #94a3b8;">📅 {row.get('fecha_limpia', '')} | 📍 <b>{row.get('ubicacion', 'MZS')}</b> ({row.get('provincia','Arauco')})</span>
+<span class="badge-org">{actor_badge}</span>
+</div>
+<h4 style="margin-top: 8px; margin-bottom: 4px; color: #f8fafc;">{row.get('titular', 'Sin Titular')}</h4>
+<p style="font-size: 0.9rem; color: #cbd5e1; line-height: 1.4; margin-bottom: 8px;">{resumen_txt}</p>
+{media_html}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px;">
+<span style="font-size: 0.75rem; color: {borde}; font-weight: bold;">{alerta} ❯ {row.get('tipologia_oficial','Otros')}</span>
+{enlace_render}
+</div>
+</div>'''
+                st.markdown(html_card, unsafe_allow_html=True)
         else:
             st.info("No se registran eventos fácticos en la base de datos para la ventana temporal y filtros activos.")
 
@@ -521,119 +537,150 @@ elif modo_analisis == "📊 Estadísticas MZS":
 # COMPUERTA 3: VISOR GEOINT (MAPA DESCOMPRIMIDO Y AGRUPADO)
 # ==============================================================================
 elif modo_analisis == "🗺️ Visor GEOINT":
-    st.subheader("🗺️ Teatro de Operaciones y Blindaje Perimetral")
-    st.markdown("Cruce espacial entre **Predios CMPC (Nodos Verdes)** y trazas fácticas. El ploteo masivo ha sido ajustado en opacidad y radio para evitar masas superpuestas al cargar la vista histórica.")
-    
-    fig_map = go.Figure()
-    capas_dibujadas = 0
-
-    if not df_predios.empty:
-        fig_map.add_trace(go.Scattermapbox(
-            lat=df_predios['latitud_num'], lon=df_predios['longitud_num'],
-            mode='markers',
-            marker=go.scattermapbox.Marker(size=10, color='#10b981', opacity=0.85),
-            text=df_predios['nombre_predio'] + " (" + df_predios['comuna'] + ")",
-            hoverinfo='text',
-            name='Predios CMPC'
-        ))
-        capas_dibujadas += 1
-
-    if not df_filtrado.empty and 'latitud_num' in df_filtrado.columns and 'longitud_num' in df_filtrado.columns:
-        df_mapa = df_filtrado.dropna(subset=['latitud_num', 'longitud_num']).copy()
-        df_mapa = df_mapa[(df_mapa['latitud_num'] > -45.0) & (df_mapa['latitud_num'] < -35.0)]
-        df_mapa = df_mapa[(df_mapa['longitud_num'] > -75.0) & (df_mapa['longitud_num'] < -70.0)]
-        
-        if not df_mapa.empty:
-            # DESCOMPRESIÓN VISUAL: Si es histórico, bajamos el tamaño del punto para que se distingan individualmente
-            radio_punto = 6 if es_historico_completo else 11
-            opacidad_punto = 0.65 if es_historico_completo else 0.85
-            
-            colores = df_mapa['nivel_alerta'].map({'CRÍTICO':'#ff4b4b', 'ALTO':'#f6a821', 'MEDIO':'#eab308', 'BAJO':'#38bdf8'}).fillna('#94a3b8')
-            fig_map.add_trace(go.Scattermapbox(
-                lat=df_mapa['latitud_num'], lon=df_mapa['longitud_num'],
-                mode='markers',
-                marker=go.scattermapbox.Marker(size=radio_punto, color=colores, opacity=opacidad_punto),
-                text=df_mapa['tipologia_oficial'] + "<br><b>Lugar:</b> " + df_mapa['ubicacion'] + "<br><b>Titular:</b> " + df_mapa['titular'].str.slice(0,60),
-                hoverinfo='text',
-                name='Puntos de Interés'
-            ))
-            capas_dibujadas += 1
-
-    if capas_dibujadas > 0:
-        fig_map.update_layout(
-            mapbox_style="carto-darkmatter",
-            mapbox_center={"lat": -38.3, "lon": -72.8},
-            mapbox_zoom=7.2,
-            margin={"r":0,"t":0,"l":0,"b":0},
-            height=700,
-            paper_bgcolor='rgba(0,0,0,0)',
-            legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01, bgcolor="rgba(0,0,0,0.6)", font=dict(color="white"))
-        )
-        st.plotly_chart(fig_map, use_container_width=True, config={'scrollZoom': True, 'displayModeBar': True})
-    else:
-        st.warning("No se encontraron coordenadas espaciales válidas para superponer en el visor GEOINT durante el periodo.")
-
-# ==============================================================================
-# COMPUERTA 4: PULSO RRSS E INSTAGRAM CON RANKING DE CUENTAS (REEMPLAZO HISTOGRAMA)
-# ==============================================================================
-elif modo_analisis == "📱 Pulso RRSS e Instagram":
-    st.subheader("📱 Inteligencia de Fuentes Abiertas: Ranking Visual de Tracción Operativa")
-    st.markdown("Auditoría directa sobre el comportamiento de pauta. **El histograma temporal ha sido reemplazado por un Ranking de Entidades de alta fidelidad** para mapear qué cuentas canalizan pauta con mayor frecuencia.")
+    st.subheader("🗺️ Inteligencia Geoespacial (Filtros por Capas)")
+    st.markdown("Activa o desactiva las capas superpuestas para analizar la proximidad de las amenazas recientes con la infraestructura histórica y predial.")
     
     if not df_filtrado.empty:
-        df_rrss = df_filtrado.copy()
+        df_geo = df_filtrado.dropna(subset=['latitud_num', 'longitud_num']).copy()
         
-        col_g1, col_g2 = st.columns(2)
-        with col_g1:
-            # REEMPLAZO CUMPLIDO: RANKING LIMPIO DE ENTIDADES / CUENTAS
-            st.markdown("#### 🏆 Ranking Oficial de Cuentas y Entidades Digitales")
-            df_rrss['perfil_rank'] = df_rrss['titular'].str.extract(r'@([a-zA-Z0-9_.]+)', expand=False).fillna(df_rrss['actor'])
-            df_rrss['perfil_rank'] = df_rrss['perfil_rank'].replace('', 'Cuentas Locales')
-            top_rank = df_rrss['perfil_rank'].value_counts().reset_index().head(10)
+        # --- CONTROLES DE CAPAS ---
+        col_c1, col_c2, col_c3 = st.columns(3)
+        with col_c1:
+            capa_vivo = st.toggle("🔴 Capa 1: Radar en Vivo (Últimos 7 Días)", value=True)
+        with col_c2:
+            capa_hist = st.toggle("⏳ Capa 2: Histórico de Atentados (Pre-2025/KMZ)", value=False)
+        with col_c3:
+            capa_cmpc = st.toggle("🌲 Capa 3: Predios CMPC", value=True)
             
-            fig_rank = px.bar(top_rank, x='count', y='perfil_rank', orientation='h', color='count', color_continuous_scale='RdPu')
-            fig_rank.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color="white", yaxis_title="Cuenta / Entidad", xaxis_title="Impactos en Ventana")
-            fig_rank.update_yaxes(categoryorder='total ascending') # El mayor arriba
-            st.plotly_chart(fig_rank, use_container_width=True)
-            
-        with col_g2:
-            st.markdown("#### Desglose de Ingestión por Canal")
-            df_can = df_rrss['canal_origen'].value_counts().reset_index()
-            fig_can = px.pie(df_can, names='canal_origen', values='count', hole=0.5,
-                             color_discrete_map={'Meta/Instagram':'#ec4899', 'Monitoreo de Terreno (Prensa/RSS)':'#38bdf8'})
-            fig_can.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color="white")
-            st.plotly_chart(fig_can, use_container_width=True)
+        fig_map = go.Figure()
+        fecha_limite_vivo = datetime.now().date() - timedelta(days=7)
+        
+        # RENDERIZADO DE CAPA 1 (VIVO)
+        if capa_vivo:
+            df_vivo = df_geo[df_geo['fecha_eval'] >= fecha_limite_vivo]
+            if not df_vivo.empty:
+                df_vivo['color_alerta'] = df_vivo['nivel_alerta'].map({'CRÍTICO': '#ff4b4b', 'ALTO': '#f6a821', 'MEDIO': '#eab308', 'BAJO': '#38bdf8'}).fillna('#64748b')
+                df_vivo['size_alerta'] = df_vivo['nivel_alerta'].map({'CRÍTICO': 14, 'ALTO': 10, 'MEDIO': 8, 'BAJO': 6}).fillna(6)
+                fig_map.add_trace(go.Scattermapbox(
+                    lat=df_vivo['latitud_num'], lon=df_vivo['longitud_num'],
+                    mode='markers',
+                    marker=go.scattermapbox.Marker(size=df_vivo['size_alerta'], color=df_vivo['color_alerta'], opacity=0.9),
+                    text=df_vivo['titular'], hoverinfo='text', name='Radar Vivo (7 Días)'
+                ))
                 
-        st.divider()
-        st.markdown("#### 🎞️ Enlaces Directos y Visualización Nativa de Pautas/Historias")
-        df_media = df_rrss[df_rrss['url_foto'].str.len() > 5].head(8)
-        if not df_media.empty:
-            cols = st.columns(4)
-            for idx, row in df_media.iterrows():
-                with cols[idx % 4]:
-                    m_html = ""
-                    url_f = str(row.get('url_foto', '')).strip()
-                    if any(ext in url_f.lower() for ext in ['.mp4', '.mov', 'reel']):
-                        m_html = f'<video style="width:100%; height:140px; object-fit:cover; border-radius:4px;" controls muted><source src="{url_f}" type="video/mp4"></video>'
-                    else:
-                        m_html = f'<img src="{url_f}" style="width:100%; height:140px; object-fit:cover; border-radius:4px;" loading="lazy">'
-                        
-                    st.markdown(f"""
-                    <div style="background-color: #0d121d; padding: 12px; border-radius: 8px; border: 1px solid #334155; margin-bottom: 10px;">
-                        {m_html}
-                        <b style="font-size:0.8rem; display:block; margin-top:6px;" title="{row.get('titular','')}">{str(row.get('titular',''))[:45]}...</b>
-                        <span style="font-size:0.7rem; color:#94a3b8;">Canal: {row.get('canal_origen','N/A')}</span><br>
-                        <a href="{row.get('enlace_noticia','')}" target="_blank" style="font-size:0.75rem; color:#38bdf8; font-weight:bold;">Ver Origen / Respaldo</a>
-                    </div>
-                    """, unsafe_allow_html=True)
+        # RENDERIZADO DE CAPA 2 (HISTÓRICO)
+        if capa_hist:
+            df_hist = df_geo[df_geo['fecha_eval'] < fecha_limite_vivo]
+            if not df_hist.empty:
+                fig_map.add_trace(go.Scattermapbox(
+                    lat=df_hist['latitud_num'], lon=df_hist['longitud_num'],
+                    mode='markers',
+                    marker=go.scattermapbox.Marker(size=6, color='#f6a821', opacity=0.4),
+                    text=df_hist['titular'], hoverinfo='text', name='Histórico Atentados'
+                ))
+                
+        # RENDERIZADO DE CAPA 3 (PREDIOS CMPC)
+        if capa_cmpc and not df_predios.empty:
+            fig_map.add_trace(go.Scattermapbox(
+                lat=df_predios['latitud_num'], lon=df_predios['longitud_num'],
+                mode='markers',
+                marker=go.scattermapbox.Marker(size=8, color='#10b981', symbol='square', opacity=0.7),
+                text=df_predios['nombre_predio'], hoverinfo='text', name='Predios CMPC'
+            ))
+            
+        centro_lat = df_geo['latitud_num'].mean() if len(df_geo) > 0 else -38.73
+        centro_lon = df_geo['longitud_num'].mean() if len(df_geo) > 0 else -72.59
+        
+        fig_map.update_layout(
+            mapbox_style="carto-darkmatter",
+            mapbox=dict(center=dict(lat=centro_lat, lon=centro_lon), zoom=6, pitch=20),
+            margin={"r":0,"t":0,"l":0,"b":0}, paper_bgcolor='rgba(0,0,0,0)',
+            legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01, bgcolor="rgba(0,0,0,0.7)", font=dict(color="white"))
+        )
+        st.plotly_chart(fig_map, use_container_width=True, height=750)
+        
+        st.markdown("### Topología de Focos Geográficos")
+        c_g1, c_g2 = st.columns(2)
+        with c_g1:
+            df_heat = df_geo['ubicacion'].value_counts().reset_index().head(10)
+            fig_bar_geo = px.bar(df_heat, x='count', y='ubicacion', orientation='h', title="Top 10 Comunas Impactadas", color='count', color_continuous_scale='Reds')
+            fig_bar_geo.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color="white")
+            fig_bar_geo.update_yaxes(categoryorder='total ascending')
+            st.plotly_chart(fig_bar_geo, use_container_width=True)
+        with c_g2:
+            df_act_geo = df_geo.groupby(['ubicacion', 'actor']).size().reset_index(name='count').sort_values(by='count', ascending=False).head(15)
+            fig_treemap = px.treemap(df_act_geo, path=['ubicacion', 'actor'], values='count', title="Distribución de Actores por Sector", color='count', color_continuous_scale='Blues')
+            fig_treemap.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color="white")
+            st.plotly_chart(fig_treemap, use_container_width=True)
+elif modo_analisis == "📱 Pulso RRSS e Instagram":
+    st.subheader("📱 Monitoreo OSINT: Dinámica de Amplificación Digital")
+    st.markdown("Métricas estilo *Brandwatch*. Este panel aísla a los **Voceros y Amplificadores Digitales** (Cuentas de Instagram/X) de las **Orgánicas Físicas** (CAM/WAM) a las que están haciendo apología.")
+    
+    if not df_filtrado.empty:
+        df_rrss = df_filtrado[df_filtrado['es_rrss'] == True].copy()
+        if not df_rrss.empty:
+            
+            # 1. MÉTRICAS BRANDWATCH SUPERIORES
+            m1, m2, m3 = st.columns(3)
+            # Extraemos la cuenta de IG del titular (Ej: "Historia de @Lof_Temulemu" -> "@Lof_Temulemu")
+            df_rrss['cuenta_digital'] = df_rrss['titular'].str.extract(r'(@[a-zA-Z0-9_.]+)', expand=False).fillna("Monitoreo General")
+            
+            cuentas_unicas = df_rrss[df_rrss['cuenta_digital'] != "Monitoreo General"]['cuenta_digital'].nunique()
+            volumen_pauta = len(df_rrss)
+            
+            with m1: st.metric("Volumen de Pauta Digital", volumen_pauta, "Menciones y Posts")
+            with m2: st.metric("Nodos Amplificadores Detectados", cuentas_unicas, "Cuentas Únicas")
+            with m3: 
+                top_cuenta = df_rrss['cuenta_digital'].value_counts().index[0] if not df_rrss['cuenta_digital'].empty else "N/A"
+                st.metric("Top Amplificador (Peak)", top_cuenta)
+                
+            st.divider()
+            
+            col_r1, col_r2 = st.columns(2)
+            with col_r1:
+                st.markdown("#### 🏆 Ranking de Amplificadores Digitales")
+                top_rank = df_rrss['cuenta_digital'].value_counts().reset_index().head(10)
+                fig_rank = px.bar(top_rank, x='count', y='cuenta_digital', orientation='h', color='count', color_continuous_scale='RdPu')
+                fig_rank.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color="white", yaxis_title="Cuenta Emisora", xaxis_title="Volumen de Viralización")
+                fig_rank.update_yaxes(categoryorder='total ascending')
+                st.plotly_chart(fig_rank, use_container_width=True)
+                
+            with col_r2:
+                st.markdown("#### 🎯 ¿A qué Orgánica Física Amplifican?")
+                # Aquí cruzamos Cuenta Digital vs Actor Físico
+                df_cruce = df_rrss[df_rrss['actor'] != 'Desconocido'].groupby(['actor']).size().reset_index(name='menciones')
+                fig_cruz = px.pie(df_cruce, names='actor', values='menciones', hole=0.5, color_discrete_sequence=px.colors.sequential.RdBu)
+                fig_cruz.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color="white")
+                st.plotly_chart(fig_cruz, use_container_width=True)
+            
+            st.markdown("#### 📂 Galería de Evidencia Digital (Muro Limpio)")
+            df_media = df_rrss[(df_rrss['url_foto'].str.len() > 5) | (df_rrss['ruta_evidencia_local'].str.len() > 5)].head(12)
+            if not df_media.empty:
+                cols = st.columns(4)
+                for idx, row in df_media.iterrows():
+                    with cols[idx % 4]:
+                        src_m, e_v = inyectar_evidencia_b64(row.get('ruta_evidencia_local', ''), row.get('url_foto', ''))
+                        if src_m:
+                            if e_v:
+                                m_html = f'<video style="width:100%; height:180px; object-fit:cover; border-radius:6px;" controls muted><source src="{src_m}" type="video/mp4"></video>'
+                            else:
+                                m_html = f'<img src="{src_m}" style="width:100%; height:180px; object-fit:cover; border-radius:6px;" loading="lazy">'
+                                
+                            cuenta_txt = row.get('cuenta_digital', 'N/A')
+                            org_txt = row.get('actor', 'N/A')
+                            html_rrss = f'''<div style="background-color: #0d121d; padding: 10px; border-radius: 8px; border: 1px solid #334155; margin-bottom: 15px;">
+{m_html}
+<div style="margin-top: 8px;">
+<span style="font-size:0.75rem; color:#38bdf8; font-weight:bold;">Emisor: {cuenta_txt}</span><br>
+<span style="font-size:0.75rem; color:#f6a821; font-weight:bold;">Contenido: {org_txt}</span>
+</div>
+<a href="{row.get('enlace_noticia','')}" target="_blank" style="font-size:0.7rem; color:#94a3b8; text-decoration:none;">🔗 Ver Post Original</a>
+</div>'''
+                            st.markdown(html_rrss, unsafe_allow_html=True)
+            else:
+                st.write("Sin archivos de respaldo multimedia rastreados en el rango temporal.")
         else:
-            st.write("Sin archivos de respaldo multimedia rastreados en el rango temporal.")
-    else:
-        st.warning("Masa crítica insuficiente para trazar analítica digital.")
-
-# ==============================================================================
-# COMPUERTA 5: ANÁLISIS DE REDES SNA (VISIBILIDAD DESCOMPRIMIDA)
-# ==============================================================================
+            st.info("No hay registros clasificados como Redes Sociales en este periodo.")
 elif modo_analisis == "🕸️ Análisis de Redes (SNA)":
     st.subheader("🕸️ Topología Relacional de Amenazas (Efecto Gephi)")
     st.markdown("El motor de simulación de repulsión ha sido incrementado para **descomprimir y organizar las etiquetas superpuestas**. Selecciona una orgánica en el menú inferior para desplegar su Ficha Analítica de Prontuario.")
