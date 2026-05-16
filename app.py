@@ -213,8 +213,7 @@ def cargar_inteligencia_masiva():
             ruido = "platería|artesanía|teatro|concierto|festival|básquetbol|fútbol|receta|turismo|poesía"
             df = df[~df['titular'].str.contains(ruido, case=False, na=False)]
             
-            df['titular_norm'] = df['titular'].str.lower().str.replace(r'[^\w\s]', '', regex=True).str.strip()
-            df = df.drop_duplicates(subset=['titular_norm'], keep='first').drop(columns=['titular_norm'])
+            
             
         return df
     except Exception as e:
@@ -225,12 +224,11 @@ def cargar_predios():
     try:
         res = supabase.table("predios_cmpc").select("*").limit(5000).execute()
         df = pd.DataFrame(res.data)
-        if not df.empty:
-            df['lat_clean'] = df['latitud'].astype(str).str.replace(',', '.').str.extract(r'(-?\d+\.\d+)')[0]
-            df['lon_clean'] = df['longitud'].astype(str).str.replace(',', '.').str.extract(r'(-?\d+\.\d+)')[0]
-            df['latitud_num'] = pd.to_numeric(df['lat_clean'], errors='coerce')
-            df['longitud_num'] = pd.to_numeric(df['lon_clean'], errors='coerce')
-            return df.dropna(subset=['latitud_num', 'longitud_num'])
+        if not df.empty and 'latitud' in df.columns:
+            # Reemplazar comas por puntos y convertir a numérico robustamente
+            df['latitud_num'] = pd.to_numeric(df['latitud'].astype(str).str.replace(',', '.').str.extract(r'([-+]?\d*\.\d+|\d+)')[0], errors='coerce')
+            df['longitud_num'] = pd.to_numeric(df['longitud'].astype(str).str.replace(',', '.').str.extract(r'([-+]?\d*\.\d+|\d+)')[0], errors='coerce')
+            return df.dropna(subset=['latitud_num', 'longitud_num']).dropna(subset=['latitud_num', 'longitud_num'])
         return pd.DataFrame()
     except Exception as e:
         return pd.DataFrame()
@@ -560,7 +558,7 @@ elif modo_analisis == "🗺️ Visor GEOINT":
             df_vivo = df_geo[df_geo['fecha_eval'] >= fecha_limite_vivo]
             if not df_vivo.empty:
                 df_vivo['color_alerta'] = df_vivo['nivel_alerta'].map({'CRÍTICO': '#ff4b4b', 'ALTO': '#f6a821', 'MEDIO': '#eab308', 'BAJO': '#38bdf8'}).fillna('#64748b')
-                df_vivo['size_alerta'] = df_vivo['nivel_alerta'].map({'CRÍTICO': 14, 'ALTO': 10, 'MEDIO': 8, 'BAJO': 6}).fillna(6)
+                df_vivo['size_alerta'] = df_vivo['nivel_alerta'].map({'CRÍTICO': 20, 'ALTO': 14, 'MEDIO': 10, 'BAJO': 6}).fillna(8)
                 fig_map.add_trace(go.Scattermapbox(
                     lat=df_vivo['latitud_num'], lon=df_vivo['longitud_num'],
                     mode='markers',
@@ -575,7 +573,7 @@ elif modo_analisis == "🗺️ Visor GEOINT":
                 fig_map.add_trace(go.Scattermapbox(
                     lat=df_hist['latitud_num'], lon=df_hist['longitud_num'],
                     mode='markers',
-                    marker=go.scattermapbox.Marker(size=6, color='#f6a821', opacity=0.4),
+                    marker=go.scattermapbox.Marker(size=8, color='#64748b', opacity=0.5),
                     text=df_hist['titular'], hoverinfo='text', name='Histórico Atentados'
                 ))
                 
@@ -584,7 +582,7 @@ elif modo_analisis == "🗺️ Visor GEOINT":
             fig_map.add_trace(go.Scattermapbox(
                 lat=df_predios['latitud_num'], lon=df_predios['longitud_num'],
                 mode='markers',
-                marker=go.scattermapbox.Marker(size=8, color='#10b981', symbol='square', opacity=0.7),
+                marker=go.scattermapbox.Marker(size=12, color='#10b981', opacity=0.8),
                 text=df_predios['nombre_predio'], hoverinfo='text', name='Predios CMPC'
             ))
             
@@ -593,11 +591,12 @@ elif modo_analisis == "🗺️ Visor GEOINT":
         
         fig_map.update_layout(
             mapbox_style="carto-darkmatter",
-            mapbox=dict(center=dict(lat=centro_lat, lon=centro_lon), zoom=6, pitch=20),
+            mapbox=dict(center=dict(lat=centro_lat, lon=centro_lon), zoom=6, pitch=10),
             margin={"r":0,"t":0,"l":0,"b":0}, paper_bgcolor='rgba(0,0,0,0)',
-            legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01, bgcolor="rgba(0,0,0,0.7)", font=dict(color="white"))
+            legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01, bgcolor="rgba(0,0,0,0.7)", font=dict(color="white")),
+            dragmode="zoom"
         )
-        st.plotly_chart(fig_map, use_container_width=True, height=750)
+        st.plotly_chart(fig_map, use_container_width=True, height=750, config={'scrollZoom': True, 'displayModeBar': True})
         
         st.markdown("### Topología de Focos Geográficos")
         c_g1, c_g2 = st.columns(2)
@@ -640,18 +639,27 @@ elif modo_analisis == "📱 Pulso RRSS e Instagram":
             with col_r1:
                 st.markdown("#### 🏆 Ranking de Amplificadores Digitales")
                 top_rank = df_rrss['cuenta_digital'].value_counts().reset_index().head(10)
-                fig_rank = px.bar(top_rank, x='count', y='cuenta_digital', orientation='h', color='count', color_continuous_scale='RdPu')
-                fig_rank.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color="white", yaxis_title="Cuenta Emisora", xaxis_title="Volumen de Viralización")
+                # Damos colores variados según la cuenta
+                fig_rank = px.bar(top_rank, x='count', y='cuenta_digital', orientation='h', color='cuenta_digital', color_discrete_sequence=px.colors.qualitative.Pastel)
+                fig_rank.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color="white", yaxis_title="Cuenta Emisora", xaxis_title="Volumen de Viralización", showlegend=False)
                 fig_rank.update_yaxes(categoryorder='total ascending')
                 st.plotly_chart(fig_rank, use_container_width=True)
                 
             with col_r2:
                 st.markdown("#### 🎯 ¿A qué Orgánica Física Amplifican?")
-                # Aquí cruzamos Cuenta Digital vs Actor Físico
-                df_cruce = df_rrss[df_rrss['actor'] != 'Desconocido'].groupby(['actor']).size().reset_index(name='menciones')
-                fig_cruz = px.pie(df_cruce, names='actor', values='menciones', hole=0.5, color_discrete_sequence=px.colors.sequential.RdBu)
-                fig_cruz.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color="white")
-                st.plotly_chart(fig_cruz, use_container_width=True)
+                # Filtramos SÓLO grupos terroristas/radicales mapuche, excluyendo medios, gobierno o desconocidos
+                grupos_objetivo = ['CAM', 'WAM', 'RML', 'RMM', 'ORT', 'PPM', 'COORDINADORA ARAUCO MALLECO', 'WEICHAN AUKA MAPU', 'RESISTENCIA MAPUCHE']
+                mask_grupos = df_rrss['actor'].str.upper().apply(lambda x: any(g in str(x) for g in grupos_objetivo))
+                df_cruce = df_rrss[mask_grupos].groupby(['actor']).size().reset_index(name='menciones')
+                
+                if not df_cruce.empty:
+                    # Gráfico de BARRAS en vez de torta, como pediste
+                    fig_cruz = px.bar(df_cruce, x='actor', y='menciones', color='menciones', color_continuous_scale='Reds')
+                    fig_cruz.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color="white", xaxis_title="Organización Radical", yaxis_title="Nº de Menciones")
+                    fig_cruz.update_xaxes(categoryorder='total descending')
+                    st.plotly_chart(fig_cruz, use_container_width=True)
+                else:
+                    st.info("No se detecta apología a grupos armados (CAM/WAM/RML/ORT) en esta ventana temporal.")
             
             st.markdown("#### 📂 Galería de Evidencia Digital (Muro Limpio)")
             df_media = df_rrss[(df_rrss['url_foto'].str.len() > 5) | (df_rrss['ruta_evidencia_local'].str.len() > 5)].head(12)
