@@ -21,6 +21,10 @@ import matplotlib.pyplot as plt
 import base64
 from wordcloud import WordCloud
 
+# --- INICIALIZAR MEMORIA TÁCTICA PARA FILTROS ---
+if 'filtro_cmpc_activo' not in st.session_state:
+    st.session_state.filtro_cmpc_activo = False
+
 # Librerías para empaquetado Word oficial
 from docx import Document
 from docx.shared import Inches, Pt, RGBColor
@@ -455,9 +459,16 @@ def cargar_predios():
         return pd.DataFrame()
     except Exception as e:
         return pd.DataFrame()
-
+if 'filtro_cmpc_activo' not in st.session_state:
+    st.session_state.filtro_cmpc_activo = False
 df_main = cargar_inteligencia_masiva()
 df_predios = cargar_predios()
+if st.session_state.filtro_cmpc_activo:
+    # Se muestra una alerta visual para que la gerencia sepa que el filtro está activo
+    st.warning("⚠️ MODO FILTRO TÁCTICO: Mostrando únicamente incidentes con afectación a CMPC / Mininco.")
+    # Filtramos df_main ANTES de que el dashboard lo use para dibujar mapas o tarjetas
+    if not df_main.empty and 'modificadores' in df_main.columns:
+        df_main = df_main[df_main['modificadores'].str.contains('CMPC|Mininco', case=False, na=False)]
 
 # --- 6. PANEL LATERAL DE MANDO ---
 st.sidebar.markdown("<h3 style='color: #ff4b4b; text-align: center;'>● CMPC C5I</h3>", unsafe_allow_html=True)
@@ -574,6 +585,12 @@ with col_m1:
 
 with col_m2:
     st.metric("AFECTACIÓN DIRECTA CMPC", tot_criticos, delta="CRÍTICO" if tot_criticos > 0 else "ESTABLE", delta_color="inverse")
+    # --- BOTÓN DE DRILL-DOWN ---
+    texto_boton = "❌ Quitar Filtro" if st.session_state.filtro_cmpc_activo else "🔍 Ver Detalle CMPC"
+    if st.button(texto_boton, key="btn_filtro_cmpc"):
+        # Alternar el estado (encender/apagar)
+        st.session_state.filtro_cmpc_activo = not st.session_state.filtro_cmpc_activo
+        st.rerun() # Fuerza al panel a recargarse instantáneamente
     st.markdown('<div class="metric-expl">Ataques confirmados a infraestructura corporativa (excluye pautas e inversión).</div>', unsafe_allow_html=True)
 
 with col_m3:
