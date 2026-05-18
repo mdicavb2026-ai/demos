@@ -10,3 +10,4 @@ beautifulsoup4
 kaleido
 numpy
 matplotlib
+wordcloud
