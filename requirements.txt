@@ -11,3 +11,6 @@ kaleido
 numpy
 matplotlib
 wordcloud
+feedparser
+instaloader
+googlenewsdecoder
