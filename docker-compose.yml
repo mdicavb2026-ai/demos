@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  war_room_dashboard:
+    build: .
+    container_name: c5i_dashboard
+    command: streamlit run app.py --server.port=8501 --server.address=0.0.0.0
+    ports:
+      - "8501:8501"
+    volumes:
+      - .:/app
+      - "/Users/cris/Desktop/proyectos docker/Monitoreo y Scrapping/Evidencias_IG:/app/Evidencias_IG"
+      - "/Users/cris/Desktop/proyectos docker/Monitoreo y Scrapping/Evidencias_IG:/app/evidencias"
+    restart: always
+
+  motor_rss:
+    build: .
+    container_name: c5i_motor_rss
+    command: python -u motor_24_7v2.py
+    volumes:
+      - "/Users/cris/Desktop/proyectos docker/Monitoreo y Scrapping/Evidencias_IG:/app/evidencias"
+    extra_hosts:
+      - "localhost:host-gateway"
+    restart: always
+
+  cazador_ig:
+    build: .
+    container_name: c5i_cazador_ig
+    command: python -u cazador_igv2.py
+    volumes:
+      - "/Users/cris/Desktop/proyectos docker/Monitoreo y Scrapping/Evidencias_IG:/app/Evidencias_IG"
+      - "/Users/cris/.config/instaloader:/root/.config/instaloader"
+    extra_hosts:
+      - "localhost:host-gateway"
+    restart: always
