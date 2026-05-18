@@ -466,9 +466,11 @@ df_predios = cargar_predios()
 if st.session_state.filtro_cmpc_activo:
     # Se muestra una alerta visual para que la gerencia sepa que el filtro está activo
     st.warning("⚠️ MODO FILTRO TÁCTICO: Mostrando únicamente incidentes con afectación a CMPC / Mininco.")
-    # Filtramos df_main ANTES de que el dashboard lo use para dibujar mapas o tarjetas
-    if not df_main.empty and 'modificadores' in df_main.columns:
-        df_main = df_main[df_main['modificadores'].str.contains('CMPC|Mininco', case=False, na=False)]
+    if not df_main.empty:
+        # Usamos el mismo diccionario táctico de la IA para no perder ninguna vulneración
+        criterios_cmpc = "cmpc|mininco|forestal mininco|fundo cmpc|predio cmpc|camión forestal|maquinaria forestal"
+        mask_cmpc_filtro = (df_main['titular'].str.contains(criterios_cmpc, case=False, na=False) | df_main.get('analisis_ia', pd.Series()).str.contains(criterios_cmpc, case=False, na=False))
+        df_main = df_main[mask_cmpc_filtro]
 
 # --- 6. PANEL LATERAL DE MANDO ---
 st.sidebar.markdown("<h3 style='color: #ff4b4b; text-align: center;'>● CMPC C5I</h3>", unsafe_allow_html=True)
@@ -547,7 +549,15 @@ if st.session_state.filtro_canal_activo != "Todos":
 st.title("WAR ROOM C5I ❯ PUESTO DE MANDO UNIFICADO")
 
 tot_alertas = len(df_filtrado)
-tot_criticos = len(df_filtrado[df_filtrado['nivel_alerta'] == 'CRÍTICO']) if tot_alertas > 0 and 'nivel_alerta' in df_filtrado.columns else 0
+
+# Calculamos la afectación REAL a CMPC para que la métrica y el semáforo sean exactos
+if tot_alertas > 0:
+    criterios_cmpc = "cmpc|mininco|forestal mininco|fundo cmpc|predio cmpc|camión forestal|maquinaria forestal"
+    mask_cmpc_metric = (df_filtrado['titular'].str.contains(criterios_cmpc, case=False, na=False) | df_filtrado.get('analisis_ia', pd.Series()).str.contains(criterios_cmpc, case=False, na=False))
+    df_solo_cmpc = df_filtrado[mask_cmpc_metric]
+    tot_criticos = len(df_solo_cmpc[df_solo_cmpc['nivel_alerta'] == 'CRÍTICO']) if 'nivel_alerta' in df_solo_cmpc.columns else len(df_solo_cmpc)
+else:
+    tot_criticos = 0
 
 color_semaforo = "#10b981" if tot_criticos == 0 else "#f6a821" if tot_criticos < 5 else "#ff4b4b"
 estado_txt = "OPERACIONES ESTABLES" if tot_criticos == 0 else "ALERTA TEMPRANA ACTIVA" if tot_criticos < 5 else "ESTADO DE EXCEPCIÓN / RIESGO CRÍTICO"
