@@ -267,7 +267,10 @@ LISTA_PPM_GENERAL = [
     "josé pichunhuala", 
     "eduardo fuica", 
     "guillermo ñiripil", 
-    "celestino córdova"
+    "celestino córdova",
+    "jorge huenchullán",
+    "huenchullán",
+    "comunidad autónoma temucuicui"
 ]
 
 DICCIONARIO_TACTICO = [
@@ -304,7 +307,11 @@ DICCIONARIO_TACTICO = [
     "lamgen", 
     "lamuen", 
     "lof", 
-    "weichan"
+    "weichan",
+    "juicio político",
+    "persecución política",
+    "movilización",
+    "estado de alerta"
 ]
 DICCIONARIO_TACTICO.extend(LISTA_PPM_CMPC)
 DICCIONARIO_TACTICO.extend(LISTA_PPM_GENERAL)

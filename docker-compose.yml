@@ -9,8 +9,9 @@ services:
       - "8501:8501"
     volumes:
       - .:/app
-      - "/Users/cris/Desktop/proyectos docker/Monitoreo y Scrapping/Evidencias_IG:/app/Evidencias_IG"
-      - "/Users/cris/Desktop/proyectos docker/Monitoreo y Scrapping/Evidencias_IG:/app/evidencias"
+      - 'C:\PROGRAMA\Evidencias_IG:/app/Evidencias_IG'
+      - 'C:\PROGRAMA\Evidencias_IG:/app/evidencias'
+      - './ig_session:/tmp/.instaloader-root'
     restart: always
 
   motor_rss:
@@ -18,7 +19,7 @@ services:
     container_name: c5i_motor_rss
     command: python -u motor_24_7v2.py
     volumes:
-      - "/Users/cris/Desktop/proyectos docker/Monitoreo y Scrapping/Evidencias_IG:/app/evidencias"
+      - 'C:\PROGRAMA\Evidencias_IG:/app/evidencias'
     extra_hosts:
       - "localhost:host-gateway"
     restart: always
@@ -28,8 +29,8 @@ services:
     container_name: c5i_cazador_ig
     command: python -u cazador_igv2.py
     volumes:
-      - "/Users/cris/Desktop/proyectos docker/Monitoreo y Scrapping/Evidencias_IG:/app/Evidencias_IG"
-      - "/Users/cris/.config/instaloader:/root/.config/instaloader"
+      - 'C:\PROGRAMA\Evidencias_IG:/app/Evidencias_IG'
+      - './ig_session:/root/.config/instaloader'
     extra_hosts:
       - "localhost:host-gateway"
     restart: always
