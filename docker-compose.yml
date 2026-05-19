@@ -30,7 +30,7 @@ services:
     command: python -u cazador_igv2.py
     volumes:
       - 'C:\PROGRAMA\Evidencias_IG:/app/Evidencias_IG'
-      - './ig_session:/root/.config/instaloader'
+      - './ig_session:/tmp/.instaloader-root'
     extra_hosts:
       - "localhost:host-gateway"
     restart: always
