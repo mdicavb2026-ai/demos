@@ -19,10 +19,17 @@ from bs4 import BeautifulSoup
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from dotenv import load_dotenv
-from googlenewsdecoder import new_decoderv1  
 
 # Cargar variables de entorno seguras
 load_dotenv()
+
+# Función interna para decodificar enlaces de Google News (sin archivos externos)
+def new_decoderv1(url):
+    try:
+        r = requests.head(url, allow_redirects=True, timeout=5)
+        return {"decoded_url": r.url}
+    except:
+        return {"decoded_url": url}
 
 # Detectar entorno (solo para logs)
 CORRIENDO_EN_NUBE = os.environ.get("GITHUB_ACTIONS") == "true"
