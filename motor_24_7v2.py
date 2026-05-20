@@ -23,6 +23,8 @@ from dotenv import load_dotenv
 # Cargar variables de entorno seguras
 load_dotenv()
 
+print("🔍 KEY CARGADA:", "SÍ" if os.getenv("GROQ_API_KEY") else "NO")
+
 # Función interna para decodificar enlaces de Google News (sin archivos externos)
 def new_decoderv1(url):
     try:
