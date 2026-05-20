@@ -22,34 +22,45 @@ from supabase import create_client, Client
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
-from googlenewsdecoder import new_decoderv1
+from dotenv import load_dotenv
+from googlenewsdecoder import new_decoderv1  
 
-# --- NUEVO: PARCHE SSL PARA MAC Y ENRUTADOR DOCKER/WINDOWS/MAC ---
+# Cargar variables de entorno seguras
+load_dotenv()
+
+# Parche SSL (útil en dev. En nube se recomienda quitarlo para cumplir normas de seguridad)
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-ctx = ssl.create_default_context()
-ctx.check_hostname = False
-ctx.verify_mode = ssl.CERT_NONE
-
-RUTA_WINDOWS_OFICINA = r"C:\PROGRAMA\Evidencias_IG"
-RUTA_MAC_FIN_DE_SEMANA = "/Users/cris/Desktop/proyectos docker/Monitoreo y Scrapping/Evidencias_IG"
-RUTA_DOCKER_CONTAINER = "/app/evidencias"
+    
+# Ruta unificada (funciona en PC, Mac y GitHub Actions)
+RUTA_BASE = os.getenv("EVIDENCIAS_PATH", "./evidencias")
 
 def obtener_ruta_base():
-    """Detecta el OS y asigna la ruta correcta de evidencias automáticamente."""
-    if os.path.exists('/.dockerenv'): 
-        return RUTA_DOCKER_CONTAINER
-    elif sys.platform == 'darwin':    
-        return RUTA_MAC_FIN_DE_SEMANA
-    else:                             
-        return RUTA_WINDOWS_OFICINA
+    """Devuelve la ruta donde se guardan evidencias. Compatible con nube."""
+    return RUTA_BASE
 
-# --- 1. CREDENCIALES SUPABASE (LA BÓVEDA) Y TELEGRAM ---
-URL_SUPABASE = "https://wffttolclywvofzakmfd.supabase.co"
-API_KEY_SUPABASE = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndmZnR0b2xjbHl3dm9memFrbWZkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc5MjMyOTksImV4cCI6MjA5MzQ5OTI5OX0.8vzHsEjPvZBf49VMCl1G8PtFYXLoxYSrzhbrYIBNEcU"
-supabase: Client = create_client(URL_SUPABASE, API_KEY_SUPABASE)
+# --- CONEXIÓN SEGURA A SUPABASE (Solo escribe con Service Key) ---
+supabase: Client = create_client(
+    os.getenv("SUPABASE_URL"),
+    os.getenv("SUPABASE_SERVICE_KEY")
+)
 
-TELEGRAM_BOT_TOKEN = "8306463935:AAHa0W852sTG4vrpjApSzsF-2ToDlekJq8w"
-TELEGRAM_CHAT_ID = "6799027326"
+# --- TELEGRAM (Credenciales desde .env) ---
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+
+def enviar_alerta_telegram(mensaje: str):
+    """Envía alertas HTML a Telegram. Usa en tu lógica cuando detectes un evento crítico."""
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": mensaje,
+        "parse_mode": "HTML"
+    }
+    try:
+        requests.post(url, json=payload)
+        print("✅ Alerta enviada a Telegram")
+    except Exception as e:
+        print(f"❌ Error al enviar alerta: {e}")
 
 # --- 2. CONFIGURACIÓN TÁCTICA (MATRIZ COMPLETA Y DESPLEGADA) ---
 RADARES_RSS = [

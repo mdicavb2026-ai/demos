@@ -1,0 +1,9 @@
+.env
+.vs/
+*/.vs/
+*.suo
+*.sqlite
+*.vsixdx
+*.user
+*.userosscache
+*.sln.docstates
