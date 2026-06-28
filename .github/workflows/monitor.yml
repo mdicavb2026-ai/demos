@@ -1,24 +1,34 @@
 name: Motor 24/7 OSINT
+
 on:
   schedule:
-    - cron: '0 * * * *'
-  workflow_dispatch:
+    - cron: '0 * * * *'  # Cada hora en punto
+  workflow_dispatch:  # Permite ejecución manual
 
 jobs:
   run-scraper:
     runs-on: ubuntu-latest
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true' # Resuelve la advertencia de Node
+    
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: '3.10' }
-      - run: pip install feedparser beautifulsoup4 supabase python-dotenv requests
-      - name: Ejecutar Motor
+      - name: Checkout código
+        uses: actions/checkout@v4
+      
+      - name: Configurar Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      
+      - name: Instalar dependencias
+        run: |
+          pip install --upgrade pip
+          pip install feedparser beautifulsoup4 supabase python-dotenv requests groq
+      
+      - name: Ejecutar Motor C5I
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           EVIDENCIAS_PATH: ./evidencias
         run: python motor_24_7v2.py
