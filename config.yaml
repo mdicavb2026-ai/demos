@@ -7,10 +7,10 @@ credentials:
     admin_c5i:
       email: admin@c5i.cl
       name: Comandante C5I
-      password: $2b$12$KIX... (AQUÍ VA EL HASH, VER PASO 3)
+      password: $2b$12$Z.iXPCxAydSugK0wRIyDdeYV3zbzse3oX9rmyMYGpR7aUamTLr8ZC
       role: admin
     analista_1:
       email: analista1@c5i.cl
       name: Analista Uno
-      password: $2b$12$KIX... (AQUÍ VA EL HASH, VER PASO 3)
+      password: $2b$12$w6BcJd2A6IZNc1UQYFBoBuddyF.vgqzMmjR5DAxzigMhHZF.SFJwi
       role: analista
