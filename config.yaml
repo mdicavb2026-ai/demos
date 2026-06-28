@@ -1,0 +1,16 @@
+cookie:
+  expiry_days: 30
+  key: c5i_macrozona_secret_key_2024
+  name: c5i_session
+credentials:
+  usernames:
+    admin_c5i:
+      email: admin@c5i.cl
+      name: Comandante C5I
+      password: $2b$12$KIX... (AQUÍ VA EL HASH, VER PASO 3)
+      role: admin
+    analista_1:
+      email: analista1@c5i.cl
+      name: Analista Uno
+      password: $2b$12$KIX... (AQUÍ VA EL HASH, VER PASO 3)
+      role: analista
